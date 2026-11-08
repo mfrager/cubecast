@@ -1,0 +1,25 @@
+[package]
+name = "ontology-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared domain types, identifiers, namespaces, configuration, and RDF store traits"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ulid.workspace = true
+chrono.workspace = true
+oxiri.workspace = true
+sha2.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

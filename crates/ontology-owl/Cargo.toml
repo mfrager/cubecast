@@ -1,0 +1,15 @@
+[package]
+name = "ontology-owl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "OWL class and property management over the RDF store"
+
+[dependencies]
+ontology-core.workspace = true
+serde.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+
+[lints]
+workspace = true

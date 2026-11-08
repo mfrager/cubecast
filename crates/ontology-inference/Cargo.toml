@@ -1,0 +1,14 @@
+[package]
+name = "ontology-inference"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "OWL entailment, mapping-driven, classification-driven, and rule enrichment"
+
+[dependencies]
+ontology-core.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+
+[lints]
+workspace = true

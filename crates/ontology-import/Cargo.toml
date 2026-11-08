@@ -1,0 +1,16 @@
+[package]
+name = "ontology-import"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "External ontology registry, import, synchronization, and mappings"
+
+[dependencies]
+ontology-core.workspace = true
+ontology-rdf.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,21 @@
+# Example application configuration.
+#
+# Load it with `Config::load(Some(Path::new("config/ontology.toml")))`.
+# `ONTO_STORAGE_PATH` and `ONTO_LOG` override the values below.
+
+[storage]
+backend = "persistent"
+path = "./data/ontology"
+max_open_files = 512
+read_only = false
+
+[logging]
+filter = "info,ontology_rdf=debug"
+json = false
+
+[namespaces]
+acme = "https://acme.example/"
+
+[limits]
+max_blocking_tasks = 8
+max_page_size = 1000

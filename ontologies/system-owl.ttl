@@ -1,0 +1,237 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix onto: <urn:onto:schema:> .
+
+<urn:onto:schema:Vocabulary> a owl:Ontology ;
+    dcterms:title "Ontology Management System Vocabulary" ;
+    dcterms:description "Internal schema used to describe managed resources, provenance, classifications, embeddings, and jobs." ;
+    owl:versionInfo "0.1.0" ;
+    owl:versionIRI <urn:onto:schema:0.1.0> .
+
+# ---------------------------------------------------------------------------
+# Core entity classes
+# ---------------------------------------------------------------------------
+
+onto:Instance a owl:Class ;
+    rdfs:label "Instance" ;
+    rdfs:comment "A managed resource described by RDF statements." .
+
+onto:Statement a owl:Class ;
+    rdfs:label "Statement" ;
+    rdfs:comment "One asserted, inferred, or derived RDF statement." .
+
+onto:Graph a owl:Class ;
+    rdfs:label "Graph" ;
+    rdfs:comment "A named graph in the dataset." .
+
+onto:Ontology a owl:Class ;
+    rdfs:label "Ontology" ;
+    rdfs:comment "A managed ontology." .
+
+onto:OntologyVersion a owl:Class ;
+    rdfs:label "Ontology version" ;
+    rdfs:comment "A recorded version of a managed or imported ontology." .
+
+onto:TaxonomyVersion a owl:Class ;
+    rdfs:subClassOf onto:OntologyVersion ;
+    rdfs:label "Taxonomy version" ;
+    rdfs:comment "A recorded version of a managed concept scheme." .
+
+onto:OwlClass a owl:Class ;
+    rdfs:subClassOf onto:Ontology ;
+    rdfs:label "OWL class" ;
+    rdfs:comment "A class defined by a managed ontology." .
+
+onto:OwlProperty a owl:Class ;
+    rdfs:subClassOf onto:Ontology ;
+    rdfs:label "OWL property" ;
+    rdfs:comment "An object or datatype property defined by a managed ontology." .
+
+onto:ConceptScheme a owl:Class ;
+    rdfs:label "Concept scheme" ;
+    rdfs:comment "A managed SKOS concept scheme." .
+
+onto:Concept a owl:Class ;
+    rdfs:label "Concept" ;
+    rdfs:comment "A SKOS concept in a managed scheme." .
+
+onto:ExternalOntology a owl:Class ;
+    rdfs:label "External ontology" ;
+    rdfs:comment "An imported ontology whose original IRIs are preserved." .
+
+onto:ClassMapping a owl:Class ;
+    rdfs:label "Class mapping" ;
+    rdfs:comment "An explicit mapping between an external and an internal class." .
+
+onto:PropertyMapping a owl:Class ;
+    rdfs:label "Property mapping" ;
+    rdfs:comment "An explicit mapping between an external and an internal property." .
+
+onto:Classification a owl:Class ;
+    rdfs:label "Classification" ;
+    rdfs:comment "A taxonomy assignment produced by a classification run." .
+
+onto:Inference a owl:Class ;
+    rdfs:label "Inference" ;
+    rdfs:comment "An inferred or recommended statement with its reasoning method." .
+
+onto:Embedding a owl:Class ;
+    rdfs:label "Embedding" ;
+    rdfs:comment "Vector metadata for an instance attribute; vectors live in a vector backend." .
+
+onto:ImportJob a owl:Class ;
+    rdfs:subClassOf onto:ProcessingJob ;
+    rdfs:label "Import job" .
+
+onto:ProcessingJob a owl:Class ;
+    rdfs:label "Processing job" ;
+    rdfs:comment "A background job with progress, counters, and errors." .
+
+onto:ProvenanceRecord a owl:Class ;
+    rdfs:label "Provenance record" ;
+    rdfs:comment "An audit record for one mutating operation." .
+
+onto:TaxonomyRelation a owl:Class ;
+    rdfs:label "Taxonomy relation" ;
+    rdfs:comment "A SKOS broader, narrower, related, or mapping relation." .
+
+onto:StatementInput a owl:Class ;
+    rdfs:label "Statement input" .
+
+# ---------------------------------------------------------------------------
+# Properties
+# ---------------------------------------------------------------------------
+
+onto:hasType a owl:ObjectProperty ;
+    rdfs:domain onto:Instance ;
+    rdfs:range owl:Class .
+
+onto:hasStatement a owl:ObjectProperty ;
+    rdfs:domain onto:Instance ;
+    rdfs:range onto:Statement .
+
+onto:inGraph a owl:ObjectProperty ;
+    rdfs:domain onto:Statement ;
+    rdfs:range onto:Graph .
+
+onto:predicate a owl:ObjectProperty ;
+    rdfs:domain onto:Statement ;
+    rdfs:range rdf:Property .
+
+onto:object a owl:ObjectProperty ;
+    rdfs:domain onto:Statement .
+
+onto:statementKind a owl:DatatypeProperty ;
+    rdfs:domain onto:Statement ;
+    rdfs:range xsd:string ;
+    rdfs:comment "One of: asserted, inferred, derived." .
+
+onto:operation a owl:DatatypeProperty ;
+    rdfs:domain onto:ProvenanceRecord ;
+    rdfs:range xsd:string .
+
+onto:targetGraph a owl:DatatypeProperty ;
+    rdfs:domain onto:ProvenanceRecord ;
+    rdfs:range xsd:string .
+
+onto:namespace a owl:DatatypeProperty ;
+    rdfs:domain onto:ExternalOntology ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Discovered term namespace of an imported ontology." .
+
+onto:classCount a owl:DatatypeProperty ;
+    rdfs:domain onto:ExternalOntology ;
+    rdfs:range xsd:integer .
+
+onto:propertyCount a owl:DatatypeProperty ;
+    rdfs:domain onto:ExternalOntology ;
+    rdfs:range xsd:integer .
+
+onto:quadCount a owl:DatatypeProperty ;
+    rdfs:domain onto:ProvenanceRecord ;
+    rdfs:range xsd:integer .
+
+onto:recordedAt a owl:DatatypeProperty ;
+    rdfs:domain onto:ProvenanceRecord ;
+    rdfs:range xsd:dateTime .
+
+onto:source a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Origin of imported or asserted data." .
+
+onto:confidence a owl:DatatypeProperty ;
+    rdfs:range xsd:decimal .
+
+onto:classifiedAs a owl:ObjectProperty ;
+    rdfs:domain onto:Instance ;
+    rdfs:range skos:Concept ;
+    rdfs:comment "Classification-driven concept assignment." .
+
+onto:manualOverride a owl:DatatypeProperty ;
+    rdfs:range xsd:boolean .
+
+onto:scheme a owl:ObjectProperty ;
+    rdfs:range onto:ConceptScheme .
+
+onto:mappingKind a owl:DatatypeProperty ;
+    rdfs:domain onto:ClassMapping ;
+    rdfs:range xsd:string .
+
+onto:externalClass a owl:ObjectProperty ;
+    rdfs:domain onto:ClassMapping ;
+    rdfs:range owl:Class .
+
+onto:internalClass a owl:ObjectProperty ;
+    rdfs:domain onto:ClassMapping ;
+    rdfs:range owl:Class .
+
+onto:externalProperty a owl:ObjectProperty ;
+    rdfs:domain onto:PropertyMapping ;
+    rdfs:range rdf:Property .
+
+onto:internalProperty a owl:ObjectProperty ;
+    rdfs:domain onto:PropertyMapping ;
+    rdfs:range rdf:Property .
+
+onto:strategy a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Classification or inference strategy name." .
+
+onto:concept a owl:ObjectProperty ;
+    rdfs:domain onto:Classification ;
+    rdfs:range skos:Concept .
+
+onto:instance a owl:ObjectProperty ;
+    rdfs:domain onto:Classification ;
+    rdfs:range onto:Instance .
+
+onto:modelId a owl:DatatypeProperty ;
+    rdfs:domain onto:Embedding ;
+    rdfs:range xsd:string .
+
+onto:dimensions a owl:DatatypeProperty ;
+    rdfs:domain onto:Embedding ;
+    rdfs:range xsd:integer .
+
+onto:sourceHash a owl:DatatypeProperty ;
+    rdfs:domain onto:Embedding ;
+    rdfs:range xsd:string .
+
+onto:attribute a owl:DatatypeProperty ;
+    rdfs:domain onto:Embedding ;
+    rdfs:range xsd:string .
+
+onto:generatedAt a owl:DatatypeProperty ;
+    rdfs:range xsd:dateTime .
+
+onto:status a owl:DatatypeProperty ;
+    rdfs:domain onto:ProcessingJob ;
+    rdfs:range xsd:string .
+
+onto:version a owl:DatatypeProperty ;
+    rdfs:range xsd:string .
