@@ -24,13 +24,17 @@ fn status_for(error: &Error) -> StatusCode {
         | Error::Parse { .. }
         | Error::Query { .. }
         | Error::Update { .. }
-        | Error::Config { .. } => StatusCode::BAD_REQUEST,
+        | Error::Config { .. }
+        | Error::GraphRegistry { .. } => StatusCode::BAD_REQUEST,
         Error::NotFound { .. } => StatusCode::NOT_FOUND,
         Error::Conflict { .. } => StatusCode::CONFLICT,
+        Error::GraphReadOnly { .. } => StatusCode::FORBIDDEN,
         Error::Unsupported { .. } => StatusCode::NOT_IMPLEMENTED,
-        Error::StoreOpen { .. } | Error::Storage { .. } | Error::Serialization { .. } => {
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
+        Error::StoreOpen { .. }
+        | Error::Storage { .. }
+        | Error::Serialization { .. }
+        | Error::GraphOpen { .. }
+        | Error::GraphPartial { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         Error::Io { .. } => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
@@ -52,6 +56,10 @@ fn kind_for(error: &Error) -> &'static str {
         Error::Config { .. } => "config",
         Error::Io { .. } => "io",
         Error::Unsupported { .. } => "unsupported",
+        Error::GraphRegistry { .. } => "graph_registry",
+        Error::GraphOpen { .. } => "graph_open",
+        Error::GraphReadOnly { .. } => "graph_read_only",
+        Error::GraphPartial { .. } => "graph_partial",
     }
 }
 

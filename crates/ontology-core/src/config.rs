@@ -1,7 +1,7 @@
 //! Configuration for storage, logging, namespaces, and limits.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -77,6 +77,75 @@ pub struct LoggingConfig {
     pub json: bool,
 }
 
+/// When the RDF/XML graph registry is synchronised into the main store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphsSync {
+    /// Parse and persist the registry while the process starts.
+    #[default]
+    OnStartup,
+    /// Use whatever the main store already holds; sync only on demand.
+    Manual,
+}
+
+/// How an update that touches more than one store is handled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdatePolicy {
+    /// Reject the update before writing anything.
+    #[default]
+    Strict,
+    /// Execute one group per store, without cross-store rollback.
+    Split,
+}
+
+fn default_graphs_root() -> PathBuf {
+    PathBuf::from("./data/graphs")
+}
+
+/// Multi-graph backend settings.
+///
+/// When the section is absent or `enabled = false`, the process runs in
+/// single-store mode and behaves exactly as before.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphsConfig {
+    /// Turns the registry and satellite stores on.
+    #[serde(default)]
+    pub enabled: bool,
+    /// RDF/XML root configuration; required when `enabled` is true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry: Option<PathBuf>,
+    /// Parent directory for satellite stores.
+    #[serde(default = "default_graphs_root")]
+    pub root: PathBuf,
+    /// Startup synchronisation behaviour.
+    #[serde(default)]
+    pub sync: GraphsSync,
+    /// Cross-store update policy.
+    #[serde(default)]
+    pub update_policy: UpdatePolicy,
+}
+
+impl Default for GraphsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            registry: None,
+            root: default_graphs_root(),
+            sync: GraphsSync::OnStartup,
+            update_policy: UpdatePolicy::Strict,
+        }
+    }
+}
+
+impl GraphsConfig {
+    /// Returns whether the registry section is active.
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+}
+
 fn default_log_filter() -> String {
     "info".to_owned()
 }
@@ -130,6 +199,9 @@ pub struct Config {
     /// Additional or overriding namespace prefixes.
     #[serde(default)]
     pub namespaces: BTreeMap<String, String>,
+    /// Multi-graph registry settings.
+    #[serde(default)]
+    pub graphs: GraphsConfig,
     /// Operational limits.
     #[serde(default)]
     pub limits: LimitsConfig,
@@ -200,6 +272,45 @@ impl Config {
             });
         }
         self.namespace_registry()?;
+        self.graphs_config()?;
+        Ok(())
+    }
+
+    /// Validates the multi-graph settings, which also depend on storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Config`] when the registry is enabled without a file,
+    /// without persistent storage, or with a root directory that escapes the
+    /// working tree.
+    pub fn graphs_config(&self) -> Result<()> {
+        if !self.graphs.enabled {
+            return Ok(());
+        }
+        if self.graphs.registry.is_none() {
+            return Err(Error::Config {
+                detail: "graphs.enabled = true requires graphs.registry".to_owned(),
+            });
+        }
+        if self.storage.backend != StorageBackend::Persistent {
+            return Err(Error::Config {
+                detail: "graphs.enabled = true requires storage.backend = \"persistent\""
+                    .to_owned(),
+            });
+        }
+        if self
+            .graphs
+            .root
+            .components()
+            .any(|component| component == Component::ParentDir)
+        {
+            return Err(Error::Config {
+                detail: format!(
+                    "graphs.root {} must not contain `..` components",
+                    self.graphs.root.display()
+                ),
+            });
+        }
         Ok(())
     }
 

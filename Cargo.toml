@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/ontology-core",
     "crates/ontology-rdf",
+    "crates/ontology-graph",
     "crates/ontology-owl",
     "crates/ontology-skos",
     "crates/ontology-classify",
@@ -57,9 +58,14 @@ oxigraph = { git = "https://github.com/mfrager/oxigraph", branch = "basenote", d
     "rocksdb-pkg-config",
 ] }
 
+# The SPARQL AST and parser must come from the same fork revision as `oxigraph`,
+# or the parsed query types would not match the engine's evaluator.
+spargebra = { git = "https://github.com/mfrager/oxigraph", branch = "basenote", package = "spargebra" }
+
 # Internal crates
 ontology-core = { path = "crates/ontology-core" }
 ontology-rdf = { path = "crates/ontology-rdf" }
+ontology-graph = { path = "crates/ontology-graph" }
 ontology-owl = { path = "crates/ontology-owl" }
 ontology-skos = { path = "crates/ontology-skos" }
 ontology-classify = { path = "crates/ontology-classify" }

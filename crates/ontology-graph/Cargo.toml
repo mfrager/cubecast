@@ -1,0 +1,22 @@
+[package]
+name = "ontology-graph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Multi-graph backend: RDF/XML registry, catalog, query routing, and store administration"
+
+[dependencies]
+ontology-core.workspace = true
+ontology-rdf.workspace = true
+spargebra.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

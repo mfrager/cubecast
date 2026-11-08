@@ -33,7 +33,10 @@ pub use command::{
     CollectionResult, Command, CommandResult, ExternalCommand, JobCommand, OntologyCommand,
     OperationReport, RdfCommand, ResourceResult, SemanticCommand, TaxonomyCommand,
 };
-pub use config::{Config, LimitsConfig, LoggingConfig, StorageBackend, StorageConfig};
+pub use config::{
+    Config, GraphsConfig, GraphsSync, LimitsConfig, LoggingConfig, StorageBackend, StorageConfig,
+    UpdatePolicy,
+};
 pub use error::{Error, Result};
 pub use external::{
     ClassMapping, ExternalOntology, ExternalOntologyRegistry, ImportReport, ImportRequest,

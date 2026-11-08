@@ -124,6 +124,45 @@ pub enum Error {
         /// Name of the unsupported operation.
         operation: String,
     },
+
+    /// The graph registry file or its contents are invalid.
+    #[error("graph registry error: {detail}")]
+    GraphRegistry {
+        /// What failed, including every validation conflict that was found.
+        detail: String,
+    },
+
+    /// A graph store could not be opened, paired with its registry entry, or
+    /// used because it is unavailable.
+    #[error("could not open graph store at {}: {detail}", path.display())]
+    GraphOpen {
+        /// Store directory.
+        path: PathBuf,
+        /// Explanation, including marker mismatches.
+        detail: String,
+    },
+
+    /// A write targeted a graph whose store is registered read-only.
+    #[error("graph {graph:?} is read-only in store {store:?}")]
+    GraphReadOnly {
+        /// Graph IRI.
+        graph: String,
+        /// Owning store identifier.
+        store: String,
+    },
+
+    /// A cross-store update failed after some groups had already committed.
+    #[error(
+        "cross-store update partially applied: {reason}; applied {applied:?}, failed {failed:?}"
+    )]
+    GraphPartial {
+        /// Stores whose group committed.
+        applied: Vec<String>,
+        /// Store whose group failed.
+        failed: String,
+        /// Underlying failure.
+        reason: String,
+    },
 }
 
 impl Error {

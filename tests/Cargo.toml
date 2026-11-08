@@ -9,6 +9,7 @@ description = "Integration tests for the ontology management system"
 [dependencies]
 ontology-core.workspace = true
 ontology-rdf.workspace = true
+ontology-graph.workspace = true
 ontology-owl.workspace = true
 ontology-skos.workspace = true
 ontology-classify.workspace = true

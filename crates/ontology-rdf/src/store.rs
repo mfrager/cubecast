@@ -8,7 +8,7 @@ use ontology_core::error::{Error, Result};
 use ontology_core::model::{GraphName, Quad, QuadPattern, QueryResult};
 use ontology_core::rdf::{RdfStore, RdfTransaction};
 use oxigraph::io::{RdfParser, RdfSerializer};
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxigraph::sparql::{LocalStoreServiceHandler, QueryResults, SparqlEvaluator};
 use oxigraph::store::{Store, StoreOptions};
 
 use crate::convert::{
@@ -24,6 +24,24 @@ const LOAD_BATCH_SIZE: usize = 10_000;
 pub(crate) fn storage_error(error: impl std::fmt::Display) -> Error {
     Error::Storage {
         detail: error.to_string(),
+    }
+}
+
+/// Shared in-process resolver for `SERVICE <oxigraph://…>` clauses.
+///
+/// The handler is engine-specific, so it stays inside the adapter: callers
+/// above this crate only pass the federation value to
+/// [`OxigraphStore::query_with_services`].
+#[derive(Clone, Default)]
+pub struct LocalFederation {
+    handler: LocalStoreServiceHandler,
+}
+
+impl LocalFederation {
+    /// Creates an empty federation cache.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
@@ -309,6 +327,49 @@ impl OxigraphStore {
     /// Propagates loading failures.
     pub fn bootstrap_schema(&self) -> Result<u64> {
         crate::schema::bootstrap(self)
+    }
+}
+
+impl OxigraphStore {
+    /// Evaluates an already-parsed query with in-process local federation.
+    ///
+    /// `SERVICE <oxigraph://…>` clauses are resolved by the engine's local
+    /// handler, which fuses default-graph satellite layouts and falls back to
+    /// the service boundary for named-graph layouts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Query`] when evaluation fails.
+    pub fn query_with_services(
+        &self,
+        query: &spargebra::Query,
+        federation: &LocalFederation,
+    ) -> Result<QueryResult> {
+        let results = SparqlEvaluator::new()
+            .with_local_service_handler(federation.handler.clone())
+            .for_query(query.clone())
+            .on_store(&self.store)
+            .execute()
+            .map_err(Error::query)?;
+        convert_query_results(results)
+    }
+
+    /// Evaluates an already-parsed update with the same local federation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Update`] when evaluation fails.
+    pub fn update_with_services(
+        &self,
+        update: &spargebra::Update,
+        federation: &LocalFederation,
+    ) -> Result<()> {
+        SparqlEvaluator::new()
+            .with_local_service_handler(federation.handler.clone())
+            .for_update(update.clone())
+            .on_store(&self.store)
+            .execute()
+            .map_err(Error::update)
     }
 }
 

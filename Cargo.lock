@@ -1392,6 +1392,7 @@ dependencies = [
  "chrono",
  "ontology-application",
  "ontology-core",
+ "ontology-graph",
  "ontology-rdf",
  "serde",
  "serde_json",
@@ -1477,6 +1478,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ontology-graph"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ontology-core",
+ "ontology-rdf",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "spargebra",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "ontology-import"
 version = "0.1.0"
 dependencies = [
@@ -1508,6 +1524,7 @@ dependencies = [
  "ontology-cli",
  "ontology-core",
  "ontology-embedding",
+ "ontology-graph",
  "ontology-import",
  "ontology-inference",
  "ontology-owl",
@@ -1528,6 +1545,7 @@ dependencies = [
  "criterion",
  "ontology-application",
  "ontology-core",
+ "ontology-graph",
  "ontology-rdf",
  "reqwest",
  "rmcp",
@@ -1555,6 +1573,7 @@ dependencies = [
  "ontology-core",
  "oxigraph",
  "serde",
+ "spargebra",
  "tempfile",
  "tracing",
 ]

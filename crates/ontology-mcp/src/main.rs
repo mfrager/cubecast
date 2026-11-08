@@ -8,8 +8,8 @@ use ontology_application::ApplicationService;
 use ontology_core::config::Config;
 use ontology_core::rdf::OntologyService;
 use ontology_core::tracing::init_tracing;
+use ontology_graph::GraphBackend;
 use ontology_mcp::{HttpService, McpServer, Policy, Resolver};
-use ontology_rdf::OxigraphStore;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -41,10 +41,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!(%base, "MCP forwarding commands to HTTP API");
         Arc::new(HttpService::new(base, api_key))
     } else {
-        let store = OxigraphStore::open_with(&config.storage)?;
-        store.bootstrap_schema()?;
+        let backend = GraphBackend::from_config(&config)?;
         tracing::info!("MCP using local RDF store");
-        Arc::new(ApplicationService::new(Arc::new(store)).with_namespaces(namespaces))
+        Arc::new(ApplicationService::new(backend.rdf_store()).with_namespaces(namespaces))
     };
 
     tracing::info!(

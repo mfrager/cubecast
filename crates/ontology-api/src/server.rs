@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ontology_application::ApplicationService;
 use ontology_core::config::Config;
 use ontology_core::error::{Error, Result};
-use ontology_rdf::OxigraphStore;
+use ontology_graph::GraphBackend;
 use tokio::net::TcpListener;
 
 use crate::router::router;
@@ -63,10 +63,10 @@ impl ServeOptions {
 /// Propagates storage, configuration, and listener failures.
 pub async fn serve(options: ServeOptions) -> Result<()> {
     options.config.validate()?;
-    let store = OxigraphStore::open_with(&options.config.storage)?;
-    store.bootstrap_schema()?;
+    let backend = GraphBackend::from_config(&options.config)?;
     let namespaces = options.config.namespace_registry()?;
-    let service = Arc::new(ApplicationService::new(Arc::new(store)).with_namespaces(namespaces));
+    let service =
+        Arc::new(ApplicationService::new(backend.rdf_store()).with_namespaces(namespaces));
     let state =
         AppState::new(service, options.api_key).with_rate_limit(options.rate_limit_per_minute);
     let app = router(state);

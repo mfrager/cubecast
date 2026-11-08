@@ -79,6 +79,35 @@ onto import --format nquads --file backup.nq
 RDF export is a logical backup; it does not preserve RocksDB engine state or
 in-process job history.
 
+## Multi-store backup and restore
+
+When `[graphs]` is enabled, `storage.path` is the main store directory and every
+satellite has its own directory under `[graphs].root`. `GraphAdmin::backup`
+backs up the main store and every ready satellite into one target directory:
+
+```text
+backup/
+  manifest.json          # store ids, roles, layouts, quad counts, engine revision
+  00-main/
+  01-products/
+```
+
+The RDF/XML registry file is authoritative and is **not** copied into the
+backup; archive it alongside the backup directory. A restore is:
+
+1. Stop the API/MCP process so no store is open.
+2. Restore `00-main` to `storage.path` and each satellite directory to its
+   registered path, keeping the `graph.meta.json` marker inside each directory.
+   Marker mismatches are rejected at startup, which catches directories moved
+   between stores by mistake.
+3. Restore the registry file that produced the backup and start one process.
+4. Verify with `graph status`/`GraphAdmin::status`: every store should report
+   `ready` and the counts should match `manifest.json`.
+
+Satellites marked `onto:required false` may be restored later; the backend
+reports them as `degraded` and queries return an empty branch for their graphs
+until the directory is back. Required satellites abort startup when missing.
+
 ## Jobs
 
 Jobs run in-process with bounded concurrency, cancellation, progress, retry,
@@ -114,3 +143,7 @@ Measure end-to-end tool latency from the client when tuning agent workflows.
 - MCP local mode and the API cannot open the same RocksDB directory at once.
 - MCP export responses are truncated with a preview above the byte limit; use a
   background export job for the full document.
+- In registry mode, a transaction is buffered and routed on commit; a crash
+  between stores can leave a cross-store transaction partially applied.
+  Keep related graphs in one store when that matters.
+- Cross-store queries are not one snapshot: each store is read independently.

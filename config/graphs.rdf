@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Root configuration for the multi-graph backend.
+
+  The file is authoritative: it is parsed, validated, and materialised into
+  `urn:onto:system:graphs` at startup. Enable it by adding a `[graphs]` section
+  to `config/ontology.toml`:
+
+      [graphs]
+      enabled = true
+      registry = "./config/graphs.rdf"
+      root = "./data/graphs"
+      sync = "on_startup"
+      update_policy = "strict"
+
+  This example registers only the main store, which is safe for an existing
+  deployment: every graph stays where it is. Add satellite stores one at a time,
+  each with its own directory under `data/graphs/`.
+-->
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:onto="urn:onto:schema:">
+
+  <onto:GraphRegistry rdf:about="urn:onto:system:graphs">
+    <onto:registryVersion>1</onto:registryVersion>
+    <onto:mainStore rdf:resource="urn:onto:store:main"/>
+    <onto:entry rdf:resource="urn:onto:store:main"/>
+  </onto:GraphRegistry>
+
+  <onto:Store rdf:about="urn:onto:store:main">
+    <onto:role>main</onto:role>
+    <onto:storePath>./data/ontology</onto:storePath>
+    <onto:access>rw</onto:access>
+    <onto:mountOrder>0</onto:mountOrder>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:system:schema"/>
+      <onto:namespace>urn:onto:</onto:namespace>
+    </onto:registration>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:system:taxonomy"/>
+    </onto:registration>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:system:external"/>
+    </onto:registration>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:data:asserted"/>
+      <onto:namespace>https://acme.example/</onto:namespace>
+    </onto:registration>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:data:inferred"/>
+    </onto:registration>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:data:classification"/>
+    </onto:registration>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:data:provenance"/>
+    </onto:registration>
+  </onto:Store>
+
+</rdf:RDF>

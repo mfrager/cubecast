@@ -12,5 +12,5 @@ pub mod store;
 pub mod transaction;
 
 pub use format::{parse_quads, RdfFormat};
-pub use store::OxigraphStore;
+pub use store::{LocalFederation, OxigraphStore};
 pub use transaction::OxigraphTransaction;

@@ -320,6 +320,10 @@ fn error_kind(error: &Error) -> &'static str {
         Error::Config { .. } => "config",
         Error::Io { .. } => "io",
         Error::Unsupported { .. } => "unsupported",
+        Error::GraphRegistry { .. } => "graph_registry",
+        Error::GraphOpen { .. } => "graph_open",
+        Error::GraphReadOnly { .. } => "graph_read_only",
+        Error::GraphPartial { .. } => "graph_partial",
     }
 }
 

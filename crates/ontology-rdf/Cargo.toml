@@ -8,6 +8,7 @@ description = "Oxigraph-backed RDF storage adapter, SPARQL, transactions, parsin
 [dependencies]
 ontology-core.workspace = true
 oxigraph.workspace = true
+spargebra.workspace = true
 serde.workspace = true
 tracing.workspace = true
 

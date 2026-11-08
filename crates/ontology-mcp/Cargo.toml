@@ -9,6 +9,7 @@ description = "Four-tool Model Context Protocol server for the ontology engine"
 ontology-core.workspace = true
 ontology-application.workspace = true
 ontology-rdf.workspace = true
+ontology-graph.workspace = true
 rmcp.workspace = true
 tokio.workspace = true
 serde.workspace = true

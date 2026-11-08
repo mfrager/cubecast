@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rdf:RDF
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:onto="urn:onto:schema:">
+
+  <onto:GraphRegistry rdf:about="urn:onto:system:graphs">
+    <onto:registryVersion>1</onto:registryVersion>
+    <onto:mainStore rdf:resource="urn:onto:store:main"/>
+    <onto:entry rdf:resource="urn:onto:store:main"/>
+    <onto:entry rdf:resource="urn:onto:store:products"/>
+    <onto:entry rdf:resource="urn:onto:store:dbpedia"/>
+  </onto:GraphRegistry>
+
+  <onto:Store rdf:about="urn:onto:store:main">
+    <onto:role>main</onto:role>
+    <onto:storePath>./data/ontology</onto:storePath>
+    <onto:access>rw</onto:access>
+    <onto:mountOrder>0</onto:mountOrder>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:system:schema"/>
+      <onto:namespace>urn:onto:</onto:namespace>
+      <onto:namespace>https://example.org/</onto:namespace>
+    </onto:registration>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:data:asserted"/>
+      <onto:namespace>https://acme.example/</onto:namespace>
+    </onto:registration>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:data:inferred"/>
+    </onto:registration>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:data:classification"/>
+    </onto:registration>
+  </onto:Store>
+
+  <onto:Store rdf:about="urn:onto:store:products">
+    <onto:role>satellite</onto:role>
+    <onto:storePath>products</onto:storePath>
+    <onto:access>ro</onto:access>
+    <onto:layout>named</onto:layout>
+    <onto:mountOrder>10</onto:mountOrder>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:data:products"/>
+      <onto:namespace>https://products.example/</onto:namespace>
+      <onto:priority>5</onto:priority>
+    </onto:registration>
+  </onto:Store>
+
+  <onto:Store rdf:about="urn:onto:store:dbpedia">
+    <onto:role>satellite</onto:role>
+    <onto:storePath>dbpedia</onto:storePath>
+    <onto:access>ro</onto:access>
+    <onto:layout>single</onto:layout>
+    <onto:mountOrder>20</onto:mountOrder>
+
+    <onto:registration rdf:parseType="Resource">
+      <onto:graphIri rdf:resource="urn:onto:external:dbpedia"/>
+      <onto:namespace>http://dbpedia.org/</onto:namespace>
+    </onto:registration>
+  </onto:Store>
+
+</rdf:RDF>
