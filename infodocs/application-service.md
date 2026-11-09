@@ -10,9 +10,10 @@ Source: `crates/ontology-application/src/`.
 
 | Component | Responsibility |
 | --- | --- |
-| `ApplicationService` | Wires managers, namespaces, jobs, and command dispatch |
+| `ApplicationService` | Wires managers, namespaces, jobs, documents, and command dispatch |
 | `InstanceService` | Instance/statement operations and provenance |
 | `JobManager` | Background execution and job registry |
+| `DocumentService` | Optional MinerU extraction orchestration, artefacts, cache, RDF mapping |
 
 ## Construction
 
@@ -36,9 +37,14 @@ let service = ApplicationService::new(store)
 - built-in namespaces.
 
 `with_namespaces` replaces the registry; `namespaces()` exposes it.
+`with_documents(service)` installs a pre-built extraction service, while
+`with_configured_documents(&config)` builds the MinerU-backed one when
+`[extraction].enabled` is set. Enabling extraction without the `python` feature
+fails construction with `Error::Config`; a document command with no service
+returns `Unsupported`.
 
 Getters: `instances()`, `owl()`, `skos()`, `external()`, `classify()`,
-`embedding()`, `inference()`, `jobs()`, `store()`.
+`embedding()`, `inference()`, `jobs()`, `documents()`, `store()`.
 
 ## Command dispatch
 
@@ -52,6 +58,7 @@ impl OntologyService for ApplicationService {
             Command::External(c) => self.handle_external(c).await,
             Command::Semantic(c) => self.handle_semantic(c).await,
             Command::Job(c) => self.handle_job(c).await,
+            Command::Document(c) => self.handle_document(c).await,
         }
     }
 }
@@ -77,6 +84,7 @@ The service consistently wraps manager returns:
 | classification/embedding/inference | typed semantic result |
 | serialized RDF | `Export` |
 | job status | `Job` |
+| document extraction | `Document` |
 
 Resource `kind` values include `instance`, `owl_class`, `owl_property`,
 `ontology`, `concept_scheme`, `concept`, `concept_collection`,
@@ -172,6 +180,22 @@ only accepted classifications.
 `GenerateEmbeddings` always passes `graph: None`, so generation reads the
 asserted graph. Inference options carry explicit graph choices.
 
+## Document extraction
+
+`Command::Document` dispatches to the optional `DocumentService`:
+
+- `Extract(request)` validates the source, looks up a matching cached run,
+  runs the blocking extractor behind a semaphore, persists artefacts,
+  validates that the result matches the requested mode, and rewrites the RDF
+  mapping when a store is attached;
+- `Get { id }` loads the newest stored run for a `urn:sha256:<hex>` id.
+
+`with_configured_documents(&config)` builds the service from
+`crates/ontology-mineru`, attaches the application store for RDF mapping, and
+shares the service with the job manager. The job payload is the same
+`ExtractionRequest`, so retries do not need the original caller. See
+[document-extraction.md](document-extraction.md).
+
 ## Job dispatch
 
 `JobCommand::Submit` returns the initial `JobStatus`. `Get` and `Results` are
@@ -194,7 +218,8 @@ concerns (HTTP auth/rate limit, MCP policy).
 
 The service is exercised indirectly by all integration suites. Phase 1 covers
 instance/statement behavior and provenance; later phases cover schema, taxonomy,
-external, semantic, jobs, CLI, API, and MCP flows.
+external, semantic, jobs, CLI, API, and MCP flows. Phase 7 adds multi-graph
+routing and phase 8 adds document command, job, and HTTP extraction flows.
 
 ```sh
 cargo test -p ontology-application
@@ -208,6 +233,10 @@ cargo test --workspace
 - No graph protection for `clear_graph`/SPARQL Update.
 - Batch classification drops rejected details at the command boundary.
 - Job results are retained only in process.
+- Document extraction is unavailable unless the process is built with the
+  `python` feature and configured with MinerU.
+- An extraction's RDF mapping cannot target unregistered per-document graphs in
+  multi-graph registry mode.
 
 ## Related
 

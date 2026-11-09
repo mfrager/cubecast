@@ -125,6 +125,22 @@ pub enum Error {
         operation: String,
     },
 
+    /// Document extraction failed.
+    #[error("document extraction failed at {stage}: {detail}")]
+    Extraction {
+        /// Pipeline stage that failed.
+        stage: &'static str,
+        /// Explanation, including any Python traceback.
+        detail: String,
+    },
+
+    /// The Python runtime or MinerU installation is unavailable.
+    #[error("Python/MinerU unavailable: {detail}")]
+    Python {
+        /// What could not be initialised or found.
+        detail: String,
+    },
+
     /// The graph registry file or its contents are invalid.
     #[error("graph registry error: {detail}")]
     GraphRegistry {
@@ -211,6 +227,21 @@ impl Error {
     /// Builds a [`Error::Invalid`] with a static-friendly message.
     pub fn invalid(detail: impl std::fmt::Display) -> Self {
         Self::Invalid {
+            detail: detail.to_string(),
+        }
+    }
+
+    /// Builds a [`Error::Extraction`] for a pipeline stage.
+    pub fn extraction(stage: &'static str, detail: impl std::fmt::Display) -> Self {
+        Self::Extraction {
+            stage,
+            detail: detail.to_string(),
+        }
+    }
+
+    /// Builds a [`Error::Python`] from a displayable error.
+    pub fn python(detail: impl std::fmt::Display) -> Self {
+        Self::Python {
             detail: detail.to_string(),
         }
     }

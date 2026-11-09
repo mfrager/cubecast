@@ -23,10 +23,10 @@ Source: `crates/ontology-api/src/`.
 `serve(ServeOptions)`:
 
 1. `Config::validate()`.
-2. `OxigraphStore::open_with(&config.storage)`.
-3. `bootstrap_schema()`.
-4. Build the namespace registry from config.
-5. Build `ApplicationService`.
+2. `GraphBackend::from_config(&config)` (opens the single store or the
+   multi-graph registry, and bootstraps the schema on the main store).
+3. Build the namespace registry from config.
+4. Build `ApplicationService`, including configured document extraction.
 6. Build `AppState` with API key and optional rate limit.
 7. Build the router.
 8. Bind `options.bind` (default `127.0.0.1:8080`).
@@ -188,6 +188,20 @@ and the asserted graph for mutations.
 Job bodies are `JobRequest` values. There is no separate request shape per job
 kind; the `kind` tag selects the payload.
 
+### Document extraction
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/v1/documents/extractions` | Run `ExtractionRequest` and return `ExtractionOutput` |
+| GET | `/api/v1/documents/{id}` | Load the latest stored run for `urn:sha256:<hex>` |
+
+Extraction is available only when the server was built with
+`ontology-mineru`'s `python` feature and `[extraction].enabled = true`.
+Otherwise the command returns `501` with `unsupported`. The POST body is the
+same request used by the CLI, jobs, and generic command route; `mode` and
+`text_format` override the configured defaults, and `output_dir` and `force`
+are accepted.
+
 ## Response shape
 
 Handlers return `Json<CommandResult>` on success. Example collection:
@@ -210,11 +224,14 @@ The exact `CommandResult` tags are documented in [core-domain.md](core-domain.md
 
 | Domain | HTTP |
 | --- | --- |
-| Invalid IRI, prefix, validation, parse, query, update, config, invalid request | 400 |
+| Invalid IRI, prefix, validation, parse, query, update, config, invalid request, graph registry | 400 |
 | NotFound | 404 |
 | Conflict | 409 |
+| GraphReadOnly | 403 |
+| Extraction | 422 |
+| Python | 503 |
 | Unsupported | 501 |
-| StoreOpen, Storage, Serialization, Io | 500 |
+| StoreOpen, Storage, Serialization, Io, GraphOpen, GraphPartial | 500 |
 
 Body:
 
@@ -235,8 +252,8 @@ not this error shape.
 - skeletal `CommandResult` and `Error` schemas.
 
 Limitations: request bodies/parameters are not described per route, response
-bodies are generic, and `/api/v1/system/metrics` is served but not listed in
-`openapi.rs`.
+bodies are generic, `/api/v1/system/metrics` is served but not listed, and the
+document extraction routes are served but not described in `openapi.rs`.
 
 ## Metrics and rate limiting
 
@@ -259,6 +276,8 @@ After 60 seconds it resets. It is not distributed and not per API key.
 
 `tests/tests/phase4_api.rs` covers health/status, CRUD, commands, auth, errors,
 and routes. `tests/tests/phase5_api.rs` covers metrics and rate limiting.
+`tests/tests/phase8_extraction.rs` drives the document POST and GET routes end
+to end with a fixture extractor.
 
 ```sh
 cargo test -p ontology-api
@@ -272,6 +291,8 @@ cargo test -p ontology-integration-tests --test phase5_api
 - No per-client or distributed rate limiting.
 - No tenant-aware authorization.
 - OpenAPI is descriptive rather than a full request/response contract.
+- Document routes need a separately built Python feature and MinerU; a default
+  build serves them as `501`.
 - Synchronous storage work runs on the async request task.
 - System graphs are not protected from generic SPARQL/clear-graph requests.
 

@@ -17,6 +17,7 @@ use ontology_core::id::{Id, OperationId};
 use ontology_core::job::{JobRequest, JobState, JobStatus};
 use ontology_core::rdf::RdfStore;
 use ontology_core::semantic::InferenceEngine;
+use ontology_document::DocumentService;
 use ontology_embedding::EmbeddingService;
 use ontology_import::ExternalOntologyManager;
 use ontology_inference::RuleInferenceEngine;
@@ -35,6 +36,8 @@ pub struct JobContext {
     pub store: Arc<dyn RdfStore>,
     /// External ontology registry used by import and sync jobs.
     pub external: Arc<ExternalOntologyManager>,
+    /// Document service used by extraction jobs.
+    pub documents: Arc<RwLock<Option<Arc<DocumentService>>>>,
 }
 
 struct JobRecord {
@@ -290,6 +293,7 @@ fn total_items(request: &JobRequest) -> usize {
         | JobRequest::EmbedBatch { instances, .. }
         | JobRequest::InferBatch { instances, .. }
         | JobRequest::ReclassifyBatch { instances, .. } => instances.len(),
+        JobRequest::DocumentExtract(_) => 1,
         JobRequest::RdfImport { .. }
         | JobRequest::RdfExport { .. }
         | JobRequest::ExternalImport(_)
@@ -437,6 +441,25 @@ async fn run(
                 .await
                 .map_err(JobFailure::Failed)?;
             serde_json::to_value(report)
+                .map_err(Error::serialization)
+                .map_err(JobFailure::Failed)
+        }
+        JobRequest::DocumentExtract(request) => {
+            let documents = context
+                .documents
+                .read()
+                .ok()
+                .and_then(|slot| slot.clone())
+                .ok_or_else(|| {
+                    JobFailure::Failed(Error::Unsupported {
+                        operation: "document extraction is not configured".to_owned(),
+                    })
+                })?;
+            let output = documents
+                .extract(request.clone())
+                .await
+                .map_err(JobFailure::Failed)?;
+            serde_json::to_value(output)
                 .map_err(Error::serialization)
                 .map_err(JobFailure::Failed)
         }

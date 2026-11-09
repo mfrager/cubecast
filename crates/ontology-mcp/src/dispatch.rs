@@ -3,10 +3,13 @@
 //! This module is deliberately transport-free and synchronous so the mapping
 //! can be unit tested without starting an MCP session.
 
+use std::path::PathBuf;
+
 use ontology_core::command::{
-    Command, ExternalCommand, JobCommand, OntologyCommand, RdfCommand, SemanticCommand,
-    TaxonomyCommand,
+    Command, DocumentCommand, ExternalCommand, JobCommand, OntologyCommand, RdfCommand,
+    SemanticCommand, TaxonomyCommand,
 };
+use ontology_core::document::{ExtractionMode, ExtractionRequest, TextFormat};
 use ontology_core::error::{Error, Result};
 use ontology_core::external::{
     ClassMapping, ImportRequest, MappingKind, MappingQuery, PropertyMapping,
@@ -360,8 +363,45 @@ pub fn rdf_command(
                 .resolver
                 .graph(required(args.graph.as_ref(), name, "graph")?)?,
         },
+        RdfAction::ExtractDocument => {
+            let source = required(args.source.as_ref(), name, "source")?;
+            return Ok(Command::Document(DocumentCommand::Extract(
+                ExtractionRequest {
+                    source: PathBuf::from(source),
+                    mode: parse_extraction_mode(args.mode.as_deref())?,
+                    text_format: parse_text_format(args.text_format.as_deref())?,
+                    output_dir: None,
+                    force: false,
+                },
+            )));
+        }
     };
     Ok(Command::Rdf(command))
+}
+
+fn parse_extraction_mode(value: Option<&str>) -> Result<Option<ExtractionMode>> {
+    value
+        .map(|value| match value.to_ascii_lowercase().as_str() {
+            "structured" => Ok(ExtractionMode::Structured),
+            "text" => Ok(ExtractionMode::Text),
+            "both" => Ok(ExtractionMode::Both),
+            other => Err(Error::validation(format!(
+                "unknown extraction mode {other:?}; use structured, text, or both"
+            ))),
+        })
+        .transpose()
+}
+
+fn parse_text_format(value: Option<&str>) -> Result<Option<TextFormat>> {
+    value
+        .map(|value| match value.to_ascii_lowercase().as_str() {
+            "markdown" => Ok(TextFormat::Markdown),
+            "plain" => Ok(TextFormat::Plain),
+            other => Err(Error::validation(format!(
+                "unknown text format {other:?}; use markdown or plain"
+            ))),
+        })
+        .transpose()
 }
 
 /// Translates an `ontology` tool request.

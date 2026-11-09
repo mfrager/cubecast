@@ -5,9 +5,10 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 use ontology_core::command::{
-    Command, ExternalCommand, JobCommand, OntologyCommand, RdfCommand, SemanticCommand,
-    TaxonomyCommand,
+    Command, DocumentCommand, ExternalCommand, JobCommand, OntologyCommand, RdfCommand,
+    SemanticCommand, TaxonomyCommand,
 };
+use ontology_core::document::{ExtractionMode, ExtractionRequest, TextFormat};
 use ontology_core::external::{ClassMapping, ImportRequest, MappingQuery, PropertyMapping};
 use ontology_core::id::Id;
 use ontology_core::job::JobRequest;
@@ -136,6 +137,12 @@ pub enum CommandArgs {
         #[command(subcommand)]
         command: InferenceArgs,
     },
+    /// Document extraction through MinerU.
+    Document {
+        /// Operation.
+        #[command(subcommand)]
+        command: DocumentArgs,
+    },
     /// Bulk RDF import.
     Import(ImportArgs),
     /// Bulk RDF export.
@@ -185,6 +192,37 @@ impl PayloadArgs {
     fn parse<T: DeserializeOwned>(&self) -> CliResult<T> {
         Ok(serde_json::from_str(&self.read()?)?)
     }
+}
+
+/// Document extraction operations.
+#[derive(Debug, Subcommand)]
+pub enum DocumentArgs {
+    /// Extract a PDF or image through MinerU.
+    Extract(DocumentExtractArgs),
+    /// Load the latest stored extraction for a document id.
+    Get {
+        /// `urn:sha256:<hex>` document identifier.
+        id: String,
+    },
+}
+
+/// Extraction options.
+#[derive(Debug, Args)]
+pub struct DocumentExtractArgs {
+    /// Path to the PDF or image.
+    pub file: PathBuf,
+    /// Extraction mode.
+    #[arg(long, value_parser = ["structured", "text", "both"])]
+    pub mode: Option<String>,
+    /// Text format for `text` and `both` modes.
+    #[arg(long, value_parser = ["markdown", "plain"])]
+    pub format: Option<String>,
+    /// Override the configured output directory.
+    #[arg(long)]
+    pub output_dir: Option<PathBuf>,
+    /// Re-run even when a cached extraction exists.
+    #[arg(long)]
+    pub force: bool,
 }
 
 /// Instance operations.
@@ -1094,6 +1132,7 @@ pub fn action(args: CommandArgs) -> CliResult<Action> {
         CommandArgs::Embedding { command } => Invocation::new(embedding_command(command)?),
         CommandArgs::External { command } => Invocation::new(external_command(command)?),
         CommandArgs::Inference { command } => Invocation::new(inference_command(command)?),
+        CommandArgs::Document { command } => Invocation::new(document_command(command)?),
         CommandArgs::Import(args) => Invocation::new(import_command(args)?),
         CommandArgs::Export(args) => {
             let output = args.output.clone();
@@ -1128,6 +1167,42 @@ fn rdf_action(command: RdfArgs) -> CliResult<Invocation> {
             })))
         }
     }
+}
+
+fn document_command(command: DocumentArgs) -> CliResult<Command> {
+    match command {
+        DocumentArgs::Extract(args) => Ok(Command::Document(DocumentCommand::Extract(
+            ExtractionRequest {
+                source: args.file,
+                mode: parse_extraction_mode(args.mode.as_deref())?,
+                text_format: parse_text_format(args.format.as_deref())?,
+                output_dir: args.output_dir,
+                force: args.force,
+            },
+        ))),
+        DocumentArgs::Get { id } => Ok(Command::Document(DocumentCommand::Get { id })),
+    }
+}
+
+fn parse_extraction_mode(value: Option<&str>) -> CliResult<Option<ExtractionMode>> {
+    value
+        .map(|value| match value.to_ascii_lowercase().as_str() {
+            "structured" => Ok(ExtractionMode::Structured),
+            "text" => Ok(ExtractionMode::Text),
+            "both" => Ok(ExtractionMode::Both),
+            other => Err(format!("unknown mode {other:?}; use structured, text, or both").into()),
+        })
+        .transpose()
+}
+
+fn parse_text_format(value: Option<&str>) -> CliResult<Option<TextFormat>> {
+    value
+        .map(|value| match value.to_ascii_lowercase().as_str() {
+            "markdown" => Ok(TextFormat::Markdown),
+            "plain" => Ok(TextFormat::Plain),
+            other => Err(format!("unknown format {other:?}; use markdown or plain").into()),
+        })
+        .transpose()
 }
 
 fn import_command(args: ImportArgs) -> CliResult<Command> {

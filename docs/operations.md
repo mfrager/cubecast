@@ -147,3 +147,41 @@ Measure end-to-end tool latency from the client when tuning agent workflows.
   between stores can leave a cross-store transaction partially applied.
   Keep related graphs in one store when that matters.
 - Cross-store queries are not one snapshot: each store is read independently.
+
+## Document extraction (MinerU)
+
+Extraction is off unless `[extraction].enabled = true`. It needs a build of
+`ontology-mineru` with the `python` feature and a Python environment containing
+the pinned MinerU release:
+
+```bash
+python3 -m venv .venv
+./.venv/bin/pip install -r python/constraints-mineru.txt
+PYO3_PYTHON=./.venv/bin/python cargo build --release -p ontology-mineru --features python
+```
+
+The embedded interpreter does not inherit a venv's `pyvenv.cfg`; the bridge
+adds `<venv>/lib/python*/site-packages` explicitly. Set `PYO3_PYTHON` to the same
+interpreter used to create the venv.
+
+Model weights are not downloaded implicitly. Provision them and point
+`[extraction].model_source` at the directory. `python -m onto_mineru.selftest`
+checks the interpreter, MinerU version, and manifest contract.
+
+Artefacts are written to `output_dir/sha256/<document>/<run>/` with
+`manifest.json`, `middle.json`, `structured.json`, and `text.md`. Re-running an
+unchanged document with the same configuration is a cache hit; `force = true`
+(or `--force`) re-parses and replaces that run.
+
+Limitations:
+
+- MinerU runs in-process through PyO3. A running parse cannot be interrupted;
+  cancelling a job discards its result but the parse still finishes.
+- Extraction concurrency defaults to one because MinerU is CPU/GPU heavy.
+- Without the `python` feature, document commands return `unsupported` with the
+  rebuild instructions above.
+
+Cache entries are keyed by document, mode, text format, and (once the
+interpreter has run at least once in the process) the MinerU version. After an
+upgrade, pass `--force` once to avoid reusing a run produced by the previous
+version; the cached manifest always records the version that produced it.

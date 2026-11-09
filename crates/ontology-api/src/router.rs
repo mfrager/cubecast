@@ -12,9 +12,10 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use ontology_core::command::{
-    Command, CommandResult, ExternalCommand, JobCommand, OntologyCommand, RdfCommand,
-    SemanticCommand, TaxonomyCommand,
+    Command, CommandResult, DocumentCommand, ExternalCommand, JobCommand, OntologyCommand,
+    RdfCommand, SemanticCommand, TaxonomyCommand,
 };
+use ontology_core::document::ExtractionRequest;
 use ontology_core::error::Error;
 use ontology_core::external::{ClassMapping, ImportRequest, MappingQuery, PropertyMapping};
 use ontology_core::id::Id;
@@ -45,6 +46,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/system/metrics", get(metrics))
         .route("/api/v1/config", get(config))
         .route("/api/v1/commands", post(command))
+        .route("/api/v1/documents/extractions", post(document_extract))
+        .route("/api/v1/documents/{id}", get(document_get))
         .route("/api/v1/rdf", post(rdf_command))
         .route("/api/v1/ontology", post(ontology_command))
         .route("/api/v1/taxonomy", post(taxonomy_command))
@@ -328,6 +331,17 @@ async fn command(State(state): State<AppState>, Json(command): Json<Command>) ->
 
 async fn rdf_command(State(state): State<AppState>, Json(command): Json<RdfCommand>) -> ApiResult {
     execute(&state, Command::Rdf(command)).await
+}
+
+async fn document_extract(
+    State(state): State<AppState>,
+    Json(request): Json<ExtractionRequest>,
+) -> ApiResult {
+    execute(&state, Command::Document(DocumentCommand::Extract(request))).await
+}
+
+async fn document_get(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    execute(&state, Command::Document(DocumentCommand::Get { id })).await
 }
 
 async fn ontology_command(

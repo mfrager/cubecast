@@ -26,6 +26,8 @@ fn status_for(error: &Error) -> StatusCode {
         | Error::Update { .. }
         | Error::Config { .. }
         | Error::GraphRegistry { .. } => StatusCode::BAD_REQUEST,
+        Error::Extraction { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+        Error::Python { .. } => StatusCode::SERVICE_UNAVAILABLE,
         Error::NotFound { .. } => StatusCode::NOT_FOUND,
         Error::Conflict { .. } => StatusCode::CONFLICT,
         Error::GraphReadOnly { .. } => StatusCode::FORBIDDEN,
@@ -60,6 +62,8 @@ fn kind_for(error: &Error) -> &'static str {
         Error::GraphOpen { .. } => "graph_open",
         Error::GraphReadOnly { .. } => "graph_read_only",
         Error::GraphPartial { .. } => "graph_partial",
+        Error::Extraction { .. } => "extraction",
+        Error::Python { .. } => "python",
     }
 }
 

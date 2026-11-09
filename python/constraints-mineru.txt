@@ -1,0 +1,6 @@
+# Pinned MinerU release.
+#
+# Phase 0 of design/document_extractor_plan.md records the exact versions this
+# deployment uses. Pin them here so CI and production provision the same
+# environment; then mirror them in docs/mineru-contract.md.
+mineru[core]>=2.1,<3

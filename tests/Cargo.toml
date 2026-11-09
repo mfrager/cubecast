@@ -16,6 +16,7 @@ ontology-classify.workspace = true
 ontology-embedding.workspace = true
 ontology-inference.workspace = true
 ontology-import.workspace = true
+ontology-document.workspace = true
 ontology-application.workspace = true
 ontology-api.workspace = true
 ontology-cli.workspace = true
@@ -23,6 +24,7 @@ axum.workspace = true
 tower.workspace = true
 clap.workspace = true
 serde_json.workspace = true
+chrono.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

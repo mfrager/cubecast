@@ -43,7 +43,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         let backend = GraphBackend::from_config(&config)?;
         tracing::info!("MCP using local RDF store");
-        Arc::new(ApplicationService::new(backend.rdf_store()).with_namespaces(namespaces))
+        Arc::new(
+            ApplicationService::new(backend.rdf_store())
+                .with_namespaces(namespaces)
+                .with_configured_documents(&config)?,
+        )
     };
 
     tracing::info!(

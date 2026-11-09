@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::document::ExtractionRequest;
 use crate::external::ImportRequest;
 use crate::id::Id;
 use crate::model::GraphName;
@@ -118,6 +119,8 @@ pub enum JobRequest {
         /// External ontology IRI.
         id: Id,
     },
+    /// Extracts a document through MinerU.
+    DocumentExtract(ExtractionRequest),
 }
 
 impl JobRequest {
@@ -133,6 +136,7 @@ impl JobRequest {
             Self::RdfExport { .. } => "rdf_export",
             Self::ExternalImport(_) => "external_import",
             Self::ExternalSync { .. } => "external_sync",
+            Self::DocumentExtract(_) => "document_extract",
         }
     }
 }

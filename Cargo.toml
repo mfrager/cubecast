@@ -10,6 +10,8 @@ members = [
     "crates/ontology-embedding",
     "crates/ontology-inference",
     "crates/ontology-import",
+    "crates/ontology-document",
+    "crates/ontology-mineru",
     "crates/ontology-application",
     "crates/ontology-api",
     "crates/ontology-cli",
@@ -72,6 +74,8 @@ ontology-classify = { path = "crates/ontology-classify" }
 ontology-embedding = { path = "crates/ontology-embedding" }
 ontology-inference = { path = "crates/ontology-inference" }
 ontology-import = { path = "crates/ontology-import" }
+ontology-document = { path = "crates/ontology-document" }
+ontology-mineru = { path = "crates/ontology-mineru" }
 ontology-application = { path = "crates/ontology-application" }
 ontology-api = { path = "crates/ontology-api" }
 ontology-cli = { path = "crates/ontology-cli" }

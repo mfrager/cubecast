@@ -65,8 +65,11 @@ pub async fn serve(options: ServeOptions) -> Result<()> {
     options.config.validate()?;
     let backend = GraphBackend::from_config(&options.config)?;
     let namespaces = options.config.namespace_registry()?;
-    let service =
-        Arc::new(ApplicationService::new(backend.rdf_store()).with_namespaces(namespaces));
+    let service = Arc::new(
+        ApplicationService::new(backend.rdf_store())
+            .with_namespaces(namespaces)
+            .with_configured_documents(&options.config)?,
+    );
     let state =
         AppState::new(service, options.api_key).with_rate_limit(options.rate_limit_per_minute);
     let app = router(state);

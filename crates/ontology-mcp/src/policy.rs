@@ -274,6 +274,9 @@ pub fn writes(command: &Command) -> bool {
         Command::Job(JobCommand::Submit(JobRequest::RdfExport { .. })) => false,
         Command::Job(JobCommand::Submit(_)) => true,
         Command::Job(_) => false,
+        // Extraction may write the RDF mapping; loading a stored run does not.
+        Command::Document(ontology_core::command::DocumentCommand::Extract(_)) => true,
+        Command::Document(ontology_core::command::DocumentCommand::Get { .. }) => false,
     }
 }
 

@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::document::{ExtractionOutput, ExtractionRequest};
 use crate::external::{ClassMapping, ImportRequest, MappingQuery, MappingReport, PropertyMapping};
 use crate::id::Id;
 use crate::job::{JobRequest, JobStatus};
@@ -40,6 +41,21 @@ pub enum Command {
     Semantic(SemanticCommand),
     /// Background job submission and monitoring.
     Job(JobCommand),
+    /// Document extraction through MinerU.
+    Document(DocumentCommand),
+}
+
+/// Document extraction operations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "camelCase")]
+pub enum DocumentCommand {
+    /// Extracts one document.
+    Extract(ExtractionRequest),
+    /// Loads the latest stored extraction for a document id.
+    Get {
+        /// `urn:sha256:<hex>` document identifier.
+        id: String,
+    },
 }
 
 /// RDF operations available in Phase 1.
@@ -599,6 +615,8 @@ pub enum CommandResult {
     },
     /// A background job status.
     Job(JobStatus),
+    /// One document extraction result.
+    Document(ExtractionOutput),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -618,6 +636,7 @@ enum CommandResultRepr {
     Inference(InferenceReport),
     Export { format: String, data: String },
     Job(JobStatus),
+    Document(ExtractionOutput),
 }
 
 impl From<CommandResult> for CommandResultRepr {
@@ -637,6 +656,7 @@ impl From<CommandResult> for CommandResultRepr {
             CommandResult::Inference(value) => Self::Inference(value),
             CommandResult::Export { format, data } => Self::Export { format, data },
             CommandResult::Job(value) => Self::Job(value),
+            CommandResult::Document(value) => Self::Document(value),
         }
     }
 }
@@ -658,6 +678,7 @@ impl From<CommandResultRepr> for CommandResult {
             CommandResultRepr::Inference(value) => Self::Inference(value),
             CommandResultRepr::Export { format, data } => Self::Export { format, data },
             CommandResultRepr::Job(value) => Self::Job(value),
+            CommandResultRepr::Document(value) => Self::Document(value),
         }
     }
 }

@@ -5,6 +5,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::document::{ExtractionMode, TextFormat};
 use crate::error::{Error, Result};
 use crate::namespace::NamespaceRegistry;
 
@@ -146,6 +147,109 @@ impl GraphsConfig {
     }
 }
 
+fn default_extraction_dir() -> PathBuf {
+    PathBuf::from("./data/extractions")
+}
+
+fn default_shim_path() -> PathBuf {
+    PathBuf::from("./python")
+}
+
+fn default_extraction_backend() -> String {
+    "pipeline".to_owned()
+}
+
+fn default_extraction_tier() -> String {
+    "default".to_owned()
+}
+
+fn default_max_input_bytes() -> u64 {
+    200 * 1024 * 1024
+}
+
+fn default_extraction_concurrency() -> usize {
+    1
+}
+
+fn default_extraction_timeout() -> u64 {
+    900
+}
+
+fn default_max_text_bytes() -> usize {
+    5 * 1024 * 1024
+}
+
+/// Document extraction settings.
+///
+/// When the section is absent or `enabled = false`, the process carries no
+/// extractor and document commands report the capability as unsupported.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtractionConfig {
+    /// Turns the MinerU extractor on.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Extraction mode used when a request does not override it.
+    #[serde(default)]
+    pub mode: ExtractionMode,
+    /// Text format used when a request does not override it.
+    #[serde(default)]
+    pub text_format: TextFormat,
+    /// Root directory for content-addressed runs.
+    #[serde(default = "default_extraction_dir")]
+    pub output_dir: PathBuf,
+    /// Directory containing the `onto_mineru` Python shim.
+    #[serde(default = "default_shim_path")]
+    pub shim_path: PathBuf,
+    /// Virtual environment holding MinerU.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub venv: Option<PathBuf>,
+    /// MinerU backend (`pipeline`, `vlm`, …).
+    #[serde(default = "default_extraction_backend")]
+    pub backend: String,
+    /// MinerU model tier.
+    #[serde(default = "default_extraction_tier")]
+    pub tier: String,
+    /// Local MinerU model directory; downloading is opt-in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_source: Option<PathBuf>,
+    /// Largest accepted source file.
+    #[serde(default = "default_max_input_bytes")]
+    pub max_input_bytes: u64,
+    /// Maximum concurrent MinerU parses.
+    #[serde(default = "default_extraction_concurrency")]
+    pub max_concurrency: usize,
+    /// Soft timeout communicated to the shim.
+    #[serde(default = "default_extraction_timeout")]
+    pub timeout_seconds: u64,
+    /// Keep raw MinerU intermediates after a successful run.
+    #[serde(default)]
+    pub keep_intermediates: bool,
+    /// Cap on text returned inline by interfaces.
+    #[serde(default = "default_max_text_bytes")]
+    pub max_text_bytes: usize,
+}
+
+impl Default for ExtractionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: ExtractionMode::Both,
+            text_format: TextFormat::Markdown,
+            output_dir: default_extraction_dir(),
+            shim_path: default_shim_path(),
+            venv: None,
+            backend: default_extraction_backend(),
+            tier: default_extraction_tier(),
+            model_source: None,
+            max_input_bytes: default_max_input_bytes(),
+            max_concurrency: default_extraction_concurrency(),
+            timeout_seconds: default_extraction_timeout(),
+            keep_intermediates: false,
+            max_text_bytes: default_max_text_bytes(),
+        }
+    }
+}
+
 fn default_log_filter() -> String {
     "info".to_owned()
 }
@@ -205,6 +309,9 @@ pub struct Config {
     /// Operational limits.
     #[serde(default)]
     pub limits: LimitsConfig,
+    /// Document extraction settings.
+    #[serde(default)]
+    pub extraction: ExtractionConfig,
 }
 
 impl Config {
@@ -273,6 +380,62 @@ impl Config {
         }
         self.namespace_registry()?;
         self.graphs_config()?;
+        self.extraction_config()?;
+        Ok(())
+    }
+
+    /// Validates the document extraction settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Config`] when extraction is enabled with an unusable
+    /// shim, venv, or model directory, or with a zero limit.
+    pub fn extraction_config(&self) -> Result<()> {
+        let extraction = &self.extraction;
+        if !extraction.enabled {
+            return Ok(());
+        }
+        if !extraction.shim_path.exists() {
+            return Err(Error::Config {
+                detail: format!(
+                    "extraction.shim_path {} does not exist",
+                    extraction.shim_path.display()
+                ),
+            });
+        }
+        if let Some(venv) = &extraction.venv {
+            if !venv.exists() {
+                return Err(Error::Config {
+                    detail: format!("extraction.venv {} does not exist", venv.display()),
+                });
+            }
+        }
+        if let Some(models) = &extraction.model_source {
+            if !models.exists() {
+                return Err(Error::Config {
+                    detail: format!(
+                        "extraction.model_source {} does not exist",
+                        models.display()
+                    ),
+                });
+            }
+        }
+        for (name, value) in [
+            ("max_input_bytes", extraction.max_input_bytes),
+            ("timeout_seconds", extraction.timeout_seconds),
+            ("max_text_bytes", extraction.max_text_bytes as u64),
+        ] {
+            if value == 0 {
+                return Err(Error::Config {
+                    detail: format!("extraction.{name} must be greater than zero"),
+                });
+            }
+        }
+        if extraction.max_concurrency == 0 {
+            return Err(Error::Config {
+                detail: "extraction.max_concurrency must be greater than zero".to_owned(),
+            });
+        }
         Ok(())
     }
 
@@ -403,6 +566,22 @@ max_page_size = 50
             config.storage.database_path(),
             Err(Error::Config { .. })
         ));
+    }
+
+    #[test]
+    fn extraction_requires_an_installed_shim_when_enabled() {
+        let config = Config::from_toml_str(
+            "[extraction]\nenabled = true\nshim_path = \"/definitely/not/a/shim\"\n",
+        )
+        .unwrap();
+        assert!(matches!(config.validate(), Err(Error::Config { .. })));
+        assert!(Config::default().validate().is_ok());
+
+        let config = Config::from_toml_str("[extraction]\ntimeout_seconds = 0\n").unwrap();
+        assert!(
+            config.validate().is_ok(),
+            "disabled extraction is not validated"
+        );
     }
 
     #[test]

@@ -21,6 +21,7 @@ Source: `crates/ontology-core/src/`.
 | `skos` | SKOS types and `TaxonomyManager` trait |
 | `external` | External registry types and `ExternalOntologyRegistry` trait |
 | `semantic` | Classification, embedding, inference types and traits |
+| `document` | Extraction modes, request/result, canonical document model, `DocumentExtractor` |
 | `job` | `JobRequest`, `JobState`, `JobStatus` |
 | `config` | TOML configuration and environment overrides |
 | `error` | `Error`, `Result` |
@@ -87,6 +88,11 @@ built-ins and applies configured overrides.
 
 Helpers: `iri_str()`, `iri()`, `from_iri_str()`, `from_iri()`, `is_system()`,
 `is_data()`, `local_name()`.
+
+The multi-graph registry adds `urn:onto:system:graphs`, which is not a
+`GraphKind` variant. Structured extraction allocates
+`urn:onto:data:document:<hex>:{structure,layout,bibliography,provenance}` per
+document, also outside `GraphKind`.
 
 `tenant_graph(tenant, kind)` validates the tenant name (alphanumeric, `-`, `_`)
 and returns `urn:onto:tenant:<tenant>:<local-name>`.
@@ -180,6 +186,7 @@ Families:
 - `SemanticCommand` — classify, batch classify, list/override/review/reclassify,
   embeddings, similarity, inference preview/apply/explain.
 - `JobCommand` — submit, get, list, results, cancel, retry.
+- `DocumentCommand` — `extract(ExtractionRequest)` and `get { id }`.
 
 `CommandResult` is tagged by `type`:
 
@@ -199,13 +206,14 @@ Families:
 | `inference` | `InferenceReport` |
 | `export` | `format`, `data` |
 | `job` | `JobStatus` |
+| `document` | `ExtractionOutput` |
 
 Collections always include the requested `limit` and `offset`, even when the
 page is empty. `count` is the size of the returned page, not the total dataset.
 
 ## Configuration
 
-`Config` is a serde TOML document with four sections:
+`Config` is a serde TOML document with six sections:
 
 ```toml
 [storage]
@@ -224,6 +232,20 @@ ex = "https://example.org/"
 [limits]
 max_page_size = 1000
 max_blocking_tasks = 8
+
+[graphs]
+enabled = false
+registry = "./config/graphs.rdf"
+root = "./data/graphs"
+sync = "on_startup"
+update_policy = "strict"
+
+[extraction]
+enabled = false
+mode = "both"
+text_format = "markdown"
+output_dir = "./data/extractions"
+shim_path = "./python"
 ```
 
 `Config::from_toml_str`, `Config::from_file`, and `Config::load` build it.
@@ -241,7 +263,12 @@ The binaries additionally read `ONTO_CONFIG` to select the TOML file, and
 - persistent storage without `storage.path`;
 - zero `limits.max_blocking_tasks`;
 - zero `limits.max_page_size`;
-- invalid namespace prefixes/namespaces.
+- invalid namespace prefixes/namespaces;
+- `graphs.enabled` without a registry, without persistent storage, or with a
+  root containing `..`;
+- zero extraction `max_input_bytes`, `max_concurrency`, `timeout_seconds`,
+  or `max_text_bytes`; enabled extraction with a missing shim path or a
+  configured venv/model directory that does not exist.
 
 `StorageConfig::database_path()` returns `None` for memory and errors when a
 persistent store has no path.
@@ -267,6 +294,12 @@ persistent store has no path.
 | `Config` | Invalid configuration | 400 |
 | `Io` | Filesystem/network/server I/O | 500 |
 | `Unsupported` | Capability not available | 501 |
+| `GraphRegistry` | Invalid registry file or content | 400 |
+| `GraphOpen` | Store cannot be opened, or marker mismatch | 500 |
+| `GraphReadOnly` | Write to a read-only store | 403 |
+| `GraphPartial` | Cross-store update partially applied | 500 |
+| `Extraction` | Extraction stage failed | 422 |
+| `Python` | Python/MinerU unavailable | 503 |
 
 `Result<T>` is `std::result::Result<T, Error>`.
 
@@ -285,6 +318,7 @@ persistent store has no path.
 - `rdfExport` → `rdf_export`
 - `externalImport` → `external_import`
 - `externalSync` → `external_sync`
+- `documentExtract` → `document_extract`
 
 `JobStatus` carries `id`, `kind`, `state`, `progress`, `processed`, `total`,
 `attempts`, optional `message`, `error`, `result`, and timestamps.
@@ -298,6 +332,8 @@ The traits that domain crates implement live here:
 - `ExternalOntologyRegistry` — import/sync/registry/mapping operations.
 - `Classifier`, `EmbeddingProvider`, `VectorIndex`, `InferenceEngine` — semantic
   capabilities.
+- `DocumentExtractor` — blocking document extraction; the async orchestration
+  lives in `ontology-document`.
 
 The corresponding value objects (`OwlClass`, `OwlProperty`, `Concept`,
 `ConceptScheme`, `Classification`, `InferencePreview`, etc.) are also in core,
@@ -312,12 +348,14 @@ implementation crate.
 - Mutations default to `data:asserted`; reads may span graphs.
 - Store writes are idempotent for quads (inserting an existing quad is a no-op).
 - No command silently returns a partial success: an error aborts the command.
+- The document model is engine-neutral: no PyO3 or MinerU type appears here.
 
 ## Tests
 
 `cargo test -p ontology-core` covers identifiers, namespaces, graphs, literals,
-quads, formats, configuration validation, and command serialization. The final
-workspace run had 24 core tests passing.
+quads, formats, configuration validation (including graph and extraction
+settings), document mode validation, and command serialization. The final
+workspace run had 31 core tests passing.
 
 ## Related
 

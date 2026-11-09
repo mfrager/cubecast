@@ -17,10 +17,10 @@ Without `ONTO_MCP_SERVER`, the binary:
 2. validates the config;
 3. initializes tracing;
 4. reads the policy and namespace registry;
-5. opens `OxigraphStore` with the configured storage;
-6. bootstraps the internal schema;
-7. builds `ApplicationService`;
-8. serves stdio.
+5. builds `GraphBackend` from the configured storage and `[graphs]` registry
+   (which opens the store(s) and bootstraps the internal schema);
+6. builds `ApplicationService`, including configured document extraction;
+7. serves stdio.
 
 Local mode owns the RocksDB directory. Do not run it against a directory already
 opened by the API.
@@ -59,6 +59,7 @@ This is the recommended mode when the API is running.
 | `add_statements` | Add statement bodies |
 | `delete_statements` | Delete by statement IDs (destructive) |
 | `clear_graph` | Clear a graph (destructive) |
+| `extract_document` | Run MinerU extraction with `source`, `mode`, `text_format` |
 
 ### `ontology`
 
@@ -105,6 +106,7 @@ All tools flatten a shared `CommonArgs` object. Important fields:
 - `source`, `external`, `internal`;
 - `kind`, `operation`, `property_kind`, `mapping_kind`, `relation`;
 - `format`, `data`, `sparql`, `query`, `label`, `language`;
+- `source`, `mode`, `text_format` for `extract_document`;
 - `body` — full resource document for create/update and compound actions;
 - `instances`, `properties`, `attributes`, `strategies`, `strategy`;
 - `types`, `members`, `top_concepts`, `broader`, `narrower`;
@@ -148,7 +150,9 @@ Read-only-allowed examples:
 
 Writes include instance/schema/taxonomy/external changes, SPARQL Update, RDF
 import, embedding generation/deletion, classification persistence, review,
-override, reclassify, and inference apply with `review`/`automatic`.
+override, reclassify, inference apply with `review`/`automatic`, and document
+extraction (`extract_document` may write the RDF mapping). Loading a stored
+run is not exposed as an MCP action.
 
 In read-only mode, dispatch forces `ClassificationOptions.persist = false` even
 if the caller omitted it or sent `true`.
@@ -162,6 +166,9 @@ Destructive means:
 - SKOS delete scheme/concept/collection, merge schemes;
 - external delete/import/sync;
 - delete embeddings.
+
+Document extraction is a write but not destructive: it needs read-write
+access, no `ONTO_MCP_ALLOW_DESTRUCTIVE`, and no `confirm`.
 
 These require **both** read-write and `ONTO_MCP_ALLOW_DESTRUCTIVE=true`, plus
 inline `confirm: true`.
@@ -233,7 +240,8 @@ content. Tool-level errors set `is_error`.
 
 Error kinds match `Error`: `invalid_iri`, `unknown_prefix`, `store_open`,
 `storage`, `parse`, `serialization`, `query`, `update`, `not_found`, `conflict`,
-`validation`, `invalid_request`, `config`, `io`, `unsupported`.
+`validation`, `invalid_request`, `config`, `io`, `unsupported`, `graph_registry`,
+`graph_open`, `graph_read_only`, `graph_partial`, `extraction`, `python`.
 
 ## Result compaction
 
@@ -286,7 +294,9 @@ include inline RDF or SPARQL, protect the log as sensitive data.
 - export job submission and polling;
 - destructive confirmation refusal and success.
 
-Unit tests cover dispatch, policy, compaction, and parameter flattening.
+Unit tests cover dispatch, policy, compaction, parameter flattening, and the
+`extract_document` action name. The stdio suite does not exercise a real
+MinerU parse.
 
 ```sh
 cargo test -p ontology-mcp
@@ -301,6 +311,8 @@ cargo bench -p ontology-mcp
 - Coarse tool annotations.
 - `target` is an echo of the input, not a verified result target.
 - Large classification/embedding lists bypass the result cap.
+- `extract_document` requires a MinerU-enabled server and read-write access;
+  there is no job submission or `force`/`output_dir` control from MCP.
 - Audit is best-effort and unredacted.
 - Remote mode depends on the API's auth, limits, and error mapping.
 

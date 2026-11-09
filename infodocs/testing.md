@@ -8,23 +8,27 @@ member (`tests`) that exercises multiple crates together.
 Last full verification:
 
 ```text
-cargo check --workspace --all-targets   exit 0
-cargo test --workspace                  exit 0
-168 passed, 0 failed
-cargo bench -p ontology-mcp -- --test   exit 0
+cargo check --workspace --all-targets          exit 0
+cargo test --workspace                         218 passed, 0 failed
+cargo fmt --all -- --check                     exit 0
+cargo clippy --workspace --all-targets         exit 0
+cargo bench -p ontology-mcp -- --test          exit 0
+PYO3_PYTHON=... cargo check -p ontology-mineru --features python  exit 0
 ```
 
-The 168 passing tests break down as:
+The 218 passing tests break down as:
 
 | Area | Tests |
 | --- | --- |
-| `ontology-core` unit tests | 30 |
+| `ontology-core` unit tests | 31 |
 | `ontology-rdf` unit tests | 7 |
 | `ontology-owl` unit tests | 4 |
 | `ontology-skos` unit tests | 3 |
+| `ontology-graph` unit tests | 19 |
 | `ontology-classify` unit tests | 5 |
 | `ontology-embedding` unit tests | 8 |
 | `ontology-inference` unit tests | 4 |
+| `ontology-document` unit tests | 7 |
 | `ontology-application` unit tests | 6 |
 | `ontology-api` unit tests | 6 |
 | `ontology-cli` unit tests | 7 |
@@ -35,9 +39,12 @@ The 168 passing tests break down as:
 | Phase 4 integration | 15 |
 | Phase 5 integration | 2 |
 | Phase 6 end-to-end integration | 3 |
+| Phase 7 multi-graph integration | 12 |
+| Phase 8 extraction integration | 5 |
+| `ontology-document` fixture integration | 6 |
 | `ontology-cli` live HTTP integration | 1 |
 | `ontology-mcp` stdio integration | 2 |
-| `ontology-mcp` feature integration | 1 |
+| `ontology-mcp` end-to-end integration | 1 |
 
 ## Commands
 
@@ -57,6 +64,9 @@ cargo test -p ontology-import
 cargo test -p ontology-classify
 cargo test -p ontology-embedding
 cargo test -p ontology-inference
+cargo test -p ontology-graph
+cargo test -p ontology-document
+cargo test -p ontology-mineru
 cargo test -p ontology-application
 cargo test -p ontology-api
 cargo test -p ontology-cli
@@ -74,6 +84,12 @@ cargo test -p ontology-integration-tests --test phase4_api
 cargo test -p ontology-integration-tests --test phase4_cli
 cargo test -p ontology-integration-tests --test phase4_jobs
 cargo test -p ontology-integration-tests --test phase5_api
+cargo test -p ontology-integration-tests --test phase6_e2e
+cargo test -p ontology-integration-tests --test phase7_multigraph
+cargo test -p ontology-integration-tests --test phase8_extraction
+
+# Python bridge compile check (requires an interpreter)
+PYO3_PYTHON=./.venv/bin/python cargo check -p ontology-mineru --features python
 
 # Benchmarks
 cargo bench -p ontology-rdf
@@ -98,7 +114,8 @@ Fixtures include:
 - `asserted_quad(subject, predicate, value)`;
 - `sample_turtle()`, `sample_nquads()`.
 
-Most tests use in-memory stores. API tests mostly use
+Most tests use in-memory stores; multi-graph tests use temporary persistent
+directories because satellites must reopen on disk. API tests mostly use
 `tower::ServiceExt::oneshot` against the router, while the CLI integration test
 binds an ephemeral TCP listener and drives the real `onto` binary. MCP stdio
 tests spawn the real `ontology-mcp` binary with `TokioChildProcess`.
@@ -188,7 +205,7 @@ tests spawn the real `ontology-mcp` binary with `TokioChildProcess`.
 
 `phase4_jobs.rs`:
 
-- all job kinds;
+- the original job kinds;
 - listing/get/results;
 - cancellation and retry;
 - progress/state transitions.
@@ -227,7 +244,33 @@ job watching.
 
 `crates/ontology-mcp/tests/e2e.rs` spans the MCP tools: class hierarchy, scheme
 and concept creation, instance creation, classification, review, inference
-preview, and export-job polling.
+preview, and export-job polling. It does not run `extract_document`.
+
+### Phase 7 — multi-graph
+
+`phase7_multigraph.rs`:
+
+- registry sync, generations, resync/retire;
+- cross-store round trips and joins, satellite fusion;
+- variable `GRAPH` expansion and dataset-clause rejection;
+- degraded optional stores and missing required stores;
+- read-only satellite writes and administrator writes;
+- strict/split update policies, per-store backup;
+- namespace/status resolution and single-mode parity.
+
+### Phase 8 — document extraction
+
+`phase8_extraction.rs`:
+
+- application `document extract` and `get` through the service;
+- text-only mode (structured data absent, text present);
+- `document_extract` job submission and result;
+- HTTP POST/GET document routes;
+- `Unsupported` when extraction is not configured.
+
+`crates/ontology-document/tests/extraction.rs` adds fixture-based structured,
+text, and both modes, mode exclusion, cache/force behavior, RDF mapping and
+idempotence. No test performs a live MinerU parse.
 
 ## Benchmarks
 
@@ -261,6 +304,11 @@ cargo bench -p ontology-mcp --bench dispatch -- --test
 - Property-based/fuzz testing of RDF and SPARQL inputs.
 - Security testing (auth bypass, SPARQL abuse, audit tampering).
 - TLS/proxy deployment behavior.
+- Live MinerU extraction, model provisioning, and Python failure modes;
+  only the shim contract, fixtures, and feature compile are covered.
+- Multi-store crash recovery, online rebalancing, and cross-store rollback
+  (degraded/missing stores and policy rejection are covered).
+- Cross-process extraction cache behavior after a MinerU upgrade.
 - Cross-platform behavior; CI runs on Linux.
 
 Passing tests establish functional behavior, not production capacity or
@@ -274,7 +322,12 @@ security.
 4. For a new HTTP route, add a route test and, if it is public, an auth test.
 5. For a new MCP action, add a dispatch unit test and extend the stdio test when
    policy behavior changes.
-6. Run the focused test, then the full workspace check/test.
+6. For extraction changes, keep fixtures under
+   `crates/ontology-document/tests/fixtures/` and do not require MinerU; gate
+   live checks behind the Python feature.
+7. For multi-graph changes, extend `phase7_multigraph.rs` with a temporary
+   registry and store directories rather than relying on operator files.
+8. Run the focused test, then the full workspace check/test.
 
 ## Related
 

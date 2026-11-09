@@ -49,7 +49,8 @@ impl McpServer {
         name = "rdf",
         description = "Manage and query RDF data. Actions: get, search, list_instances, \
                        create, update, delete, query, sparql_update, import, export, inspect, \
-                       list_graphs, statements, add_statements, delete_statements, clear_graph.",
+                       list_graphs, statements, add_statements, delete_statements, clear_graph, \
+                       extract_document.",
         annotations(
             title = "RDF data",
             read_only_hint = false,
@@ -324,6 +325,8 @@ fn error_kind(error: &Error) -> &'static str {
         Error::GraphOpen { .. } => "graph_open",
         Error::GraphReadOnly { .. } => "graph_read_only",
         Error::GraphPartial { .. } => "graph_partial",
+        Error::Extraction { .. } => "extraction",
+        Error::Python { .. } => "python",
     }
 }
 

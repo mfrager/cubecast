@@ -103,6 +103,7 @@ The prompt text is written to stderr; declining returns `aborted`.
 | `import` | Bulk RDF import |
 | `export` | Bulk RDF export |
 | `job` | submit, classify, embed, infer, reclassify, import, export, external-import, external-sync, list, get, results, cancel, retry, watch |
+| `document` | extract, get |
 | `shell` | Interactive persistent session |
 
 Create/update commands accept `--json` or `--file` payloads for the corresponding
@@ -120,7 +121,28 @@ applicable.
 5. Uses the resolved client API key as the server's bearer key if one is set.
 6. Calls `ontology_api::serve`.
 
-It uses the same local store configuration as the API binary.
+It uses the same local store configuration as the API binary, including
+`[graphs]` registry mode and `[extraction]` through `ontology_api::serve`.
+
+## Document extraction
+
+```sh
+onto document extract report.pdf --mode both --format markdown
+onto document extract scan.png --mode text --format plain --output-dir ./out
+onto document get urn:sha256:<hex>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--mode` | `structured`, `text`, or `both`; overrides `[extraction].mode` |
+| `--format` | `markdown` or `plain`; overrides `[extraction].text_format` |
+| `--output-dir` | Override the configured artefact root for this run |
+| `--force` | Ignore a matching cached run |
+
+The CLI sends the path; it does not read the document itself, so a remote
+server must be able to open that path. The server must be built with the
+`python` feature and configured with MinerU; otherwise the request returns
+`501 unsupported`. `get` reads the latest stored run and does not re-parse.
 
 ## Interactive shell
 
@@ -154,6 +176,8 @@ stderr. It then prints the final status. The minimum interval is one second.
 
 `tests/tests/phase4_cli.rs` exercises command construction, dry-run behavior,
 output, confirmations, profiles, and end-to-end calls against a test server.
+The phase 8 suite covers document extraction through the application and HTTP
+layers; it does not spawn the CLI for that flow.
 
 ```sh
 cargo test -p ontology-cli
@@ -168,6 +192,8 @@ cargo test -p ontology-integration-tests --test phase4_cli
 - No pagination helper beyond passing `--limit`/`--offset`.
 - No shell completion generation or persistent server session.
 - History is a flat file with no concurrency control.
+- Document commands require a server built with the Python feature and MinerU;
+  no local fallback exists.
 
 ## Related
 

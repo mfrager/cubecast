@@ -19,3 +19,22 @@ acme = "https://acme.example/"
 [limits]
 max_blocking_tasks = 8
 max_page_size = 1000
+
+# Document extraction through MinerU. Disabled by default; enabling it requires
+# a build of `ontology-mineru` with `--features python` and a venv containing
+# MinerU. See docs/operations.md.
+[extraction]
+enabled = false
+mode = "both"
+text_format = "markdown"
+output_dir = "./data/extractions"
+shim_path = "./python"
+# venv = "./.venv"
+# model_source = "./models/mineru"
+backend = "pipeline"
+tier = "default"
+max_input_bytes = 209715200
+max_concurrency = 1
+timeout_seconds = 900
+keep_intermediates = false
+max_text_bytes = 5242880

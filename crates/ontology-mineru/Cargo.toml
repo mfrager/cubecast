@@ -1,0 +1,26 @@
+[package]
+name = "ontology-mineru"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PyO3 adapter that runs MinerU and returns the canonical document model"
+
+[features]
+default = []
+python = ["dep:pyo3"]
+
+[dependencies]
+ontology-core.workspace = true
+ontology-document.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+pyo3 = { version = "0.30", optional = true, features = ["auto-initialize"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

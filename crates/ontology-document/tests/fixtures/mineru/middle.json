@@ -1,0 +1,128 @@
+{
+  "_backend": "pipeline",
+  "_version_name": "2.1.0",
+  "schema": "docvortex.middle",
+  "schema_version": "2.0",
+  "pdf_info": [
+    {
+      "page_idx": 0,
+      "page_size": [612, 792],
+      "para_blocks": [
+        {
+          "type": "title",
+          "bbox": [72, 60, 540, 96],
+          "lines": [
+            {
+              "bbox": [72, 60, 540, 96],
+              "spans": [
+                { "type": "text", "content": "A Study of Things", "bbox": [72, 60, 540, 96], "style": "title" }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 1,
+          "bbox": [72, 120, 540, 140],
+          "lines": [
+            { "bbox": [72, 120, 540, 140], "spans": [{ "type": "text", "content": "Abstract" }] }
+          ]
+        },
+        {
+          "type": "text",
+          "bbox": [72, 148, 540, 200],
+          "lines": [
+            { "bbox": [72, 148, 540, 170], "spans": [{ "type": "text", "content": "We study things and report what we find." }] },
+            { "bbox": [72, 176, 540, 200], "spans": [{ "type": "text", "content": "The results are reproducible." }] }
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 1,
+          "bbox": [72, 220, 540, 240],
+          "lines": [
+            { "bbox": [72, 220, 540, 240], "spans": [{ "type": "text", "content": "1 Introduction" }] }
+          ]
+        },
+        {
+          "type": "text",
+          "bbox": [72, 248, 540, 320],
+          "lines": [
+            { "bbox": [72, 248, 540, 270], "spans": [{ "type": "text", "content": "As shown before [1], things are interesting." }] },
+            { "bbox": [72, 276, 540, 300], "spans": [{ "type": "text", "content": "A second line continues the paragraph." }] }
+          ]
+        },
+        {
+          "type": "image",
+          "bbox": [120, 340, 492, 460],
+          "img_path": "figures/overview.png",
+          "caption": "Figure 1: Overview of the method."
+        },
+        {
+          "type": "table",
+          "bbox": [72, 480, 540, 580],
+          "caption": "Table 1: Measurements.",
+          "html": "<table><tr><th>Name</th><th>Value</th></tr><tr><td>alpha</td><td>1</td></tr><tr><td>beta</td><td>2</td></tr></table>"
+        },
+        {
+          "type": "interline_equation",
+          "bbox": [240, 600, 372, 620],
+          "latex": "E = mc^2",
+          "text": "$$E = mc^2$$"
+        }
+      ],
+      "discarded_blocks": [
+        {
+          "type": "text",
+          "bbox": [72, 20, 200, 36],
+          "lines": [
+            { "bbox": [72, 20, 200, 36], "spans": [{ "type": "text", "content": "Journal of Tests" }] }
+          ]
+        }
+      ]
+    },
+    {
+      "page_idx": 1,
+      "page_size": [612, 792],
+      "para_blocks": [
+        {
+          "type": "heading",
+          "level": 1,
+          "bbox": [72, 72, 540, 92],
+          "lines": [
+            { "bbox": [72, 72, 540, 92], "spans": [{ "type": "text", "content": "2 Methods" }] }
+          ]
+        },
+        {
+          "type": "text",
+          "bbox": [72, 100, 540, 160],
+          "lines": [
+            { "bbox": [72, 100, 540, 124], "spans": [{ "type": "text", "content": "We measure each thing twice." }] }
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 1,
+          "bbox": [72, 200, 540, 220],
+          "lines": [
+            { "bbox": [72, 200, 540, 220], "spans": [{ "type": "text", "content": "References" }] }
+          ]
+        },
+        {
+          "type": "text",
+          "bbox": [72, 228, 540, 260],
+          "lines": [
+            { "bbox": [72, 228, 540, 260], "spans": [{ "type": "text", "content": "[1] A. Author. On things. Journal of Tests, 2020." }] }
+          ]
+        },
+        {
+          "type": "text",
+          "bbox": [72, 268, 540, 300],
+          "lines": [
+            { "bbox": [72, 268, 540, 300], "spans": [{ "type": "text", "content": "[2] B. Writer. More things. Test Press, 2021." }] }
+          ]
+        }
+      ]
+    }
+  ]
+}

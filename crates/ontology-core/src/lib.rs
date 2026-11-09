@@ -15,6 +15,7 @@
 
 pub mod command;
 pub mod config;
+pub mod document;
 pub mod error;
 pub mod external;
 pub mod format;
@@ -34,8 +35,16 @@ pub use command::{
     OperationReport, RdfCommand, ResourceResult, SemanticCommand, TaxonomyCommand,
 };
 pub use config::{
-    Config, GraphsConfig, GraphsSync, LimitsConfig, LoggingConfig, StorageBackend, StorageConfig,
-    UpdatePolicy,
+    Config, ExtractionConfig, GraphsConfig, GraphsSync, LimitsConfig, LoggingConfig,
+    StorageBackend, StorageConfig, UpdatePolicy,
+};
+pub use document::CacheIdentity;
+pub use document::{
+    AssetRef, Author, Block, BlockKind, Caption, Citation, DocumentExtractor, DocumentMetadata,
+    ExtractionContext, ExtractionMode, ExtractionOutput, ExtractionProvenance, ExtractionRequest,
+    ExtractionWarning, Formula, FormulaType, Geometry, Line, ListBlock, Page, Reference,
+    ResolvedWork, Section, Span, StructuredDocument, Table, TableCell, TableRow, TextFormat,
+    TextOutput,
 };
 pub use error::{Error, Result};
 pub use external::{

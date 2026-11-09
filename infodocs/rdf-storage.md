@@ -52,6 +52,23 @@ directory fails at the engine lock.
 `OxigraphStore` owns the engine handle and does not implement `Clone`. Services
 share it as `Arc<dyn RdfStore>` (alias `DynStore`).
 
+## Composition: `GraphBackend`
+
+Interfaces do not open `OxigraphStore` directly. They call
+`ontology_graph::GraphBackend::from_config(&config)`:
+
+- with `[graphs].enabled = false`, it opens one store, bootstraps the schema,
+  and `rdf_store()` returns that `OxigraphStore`;
+- with `[graphs].enabled = true`, it loads the RDF/XML registry, opens the main
+  store plus satellites, persists the registry into `urn:onto:system:graphs`,
+  and returns a `MultiStore` that implements `RdfStore` by routing.
+
+The application service, the HTTP server, the CLI `server` subcommand, and
+local MCP mode all consume the resulting trait object. Domain managers never
+know whether one store or a router is behind it. See
+[multi-graph.md](multi-graph.md) for the registry, catalog, routing rules, and
+`GraphAdmin` (sync, status, validation, backup).
+
 ## RDF conversion
 
 `convert.rs` translates:
@@ -118,6 +135,13 @@ the default graph.
 
 SPARQL parse and execution failures map to `Error::Query` or `Error::Update`.
 
+In multi-graph mode, a `MultiStore` plans each query once per generation. A
+single-layout satellite can be fused into the host query; a named-layout one is
+reached through in-process `SERVICE <oxigraph:///absolute/path>` clauses served
+by `LocalFederation` in this crate. `GRAPH ?g` expands to a union of registered
+graphs, unregistered graphs yield empty branches, and `FROM`/`FROM NAMED` are
+rejected.
+
 ## Transactions and atomicity
 
 `RdfStore::transaction()` returns `Box<dyn RdfTransaction + '_>`. The Oxigraph
@@ -181,6 +205,10 @@ Coverage in `tests/tests/phase1_storage.rs` includes:
 - schema bootstrap idempotence;
 - backup/open validation.
 
+`tests/tests/phase7_multigraph.rs` covers the composed backend: registry sync,
+cross-store queries and joins, fusion, degraded stores, update policies, and
+per-store backup. `cargo test -p ontology-graph` covers the graph crate itself.
+
 `crates/ontology-rdf/benches/store.rs` measures insertion and query paths.
 
 ```sh
@@ -196,9 +224,14 @@ cargo bench -p ontology-rdf
   queries can consume request time.
 - Backup/recovery is engine-level; there is no scheduling or retention policy.
 - Read-only stores still require the engine's read-only open path.
+- Per-document extraction graphs are not registered in multi-graph mode, so the
+  document RDF mapping cannot write them without prior registration.
+- Multi-store updates have no cross-store transaction; `strict` rejects them
+  and `split` can leave earlier groups committed.
 
 ## Related
 
 - Domain traits: [core-domain.md](core-domain.md)
+- Multi-store composition: [multi-graph.md](multi-graph.md)
 - Schema bootstrap content: [owl-schema.md](owl-schema.md)
 - Operations: [../docs/operations.md](../docs/operations.md)

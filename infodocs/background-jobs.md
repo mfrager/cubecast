@@ -20,6 +20,7 @@ Source: `crates/ontology-application/src/jobs.rs`, with the job model in
 | `rdfExport` | `format`, optional `graph` |
 | `externalImport` | `ImportRequest` |
 | `externalSync` | external ontology `id` |
+| `documentExtract` | `ExtractionRequest` (source, mode, format, output dir, force) |
 
 Because the payload is stored with the job, retry can re-run it without the
 original request.
@@ -58,8 +59,8 @@ let manager = JobManager::new(context, concurrency);
 ```
 
 `JobContext` holds shared handles to classification, embedding, inference, the
-RDF store, and the external registry. The application service uses concurrency
-**4**.
+RDF store, the external registry, and the optional document service. The
+application service uses concurrency **4**.
 
 The manager stores `JobRecord { status, request, cancel }` in a
 `RwLock<BTreeMap<Id, JobRecord>>`. A Tokio `Semaphore` bounds concurrent
@@ -73,8 +74,9 @@ for a permit, marks running, executes, and writes the terminal state.
 
 Batch jobs report after each instance: `processed = index + 1`,
 `progress = processed / total`, capped at 1.0. Single-unit jobs
-(import/export/external) report `total = 1`; completion sets
-`processed = total = 1`, `progress = 1.0`.
+(import/export/external/extraction) report `total = 1`; completion sets
+`processed = total = 1`, `progress = 1.0`. Extraction reports no intermediate
+progress because one MinerU parse is opaque.
 
 Results are serialized JSON:
 
@@ -86,6 +88,7 @@ Results are serialized JSON:
 | RDF import | `{ "imported": n }` |
 | RDF export | `{ "format": ..., "data": ... }` |
 | external import/sync | `ImportReport` |
+| document extraction | `ExtractionOutput` |
 
 `get`, `list`, and `results` all return statuses. `results` does not extract only
 the `result` field; the CLI and callers read the field from the status.
@@ -148,12 +151,18 @@ CLI: `onto job` with submit helpers, list/get/results/cancel/retry/watch.
 
 MCP: the `jobs` tool with submit/list/get/results/cancel/retry. Submissions of
 external import/sync are separately gated and confirmed; RDF import is a write;
-RDF export is allowed read-only.
+RDF export is allowed read-only. `document_extract` is a write because it may
+map the result to RDF.
+
+`document_extract` fails with `Unsupported` when no document service is
+configured; it does not fall back to another extractor.
 
 ## Tests
 
 `tests/tests/phase4_jobs.rs` covers submission, progress, results, cancellation,
-retry, and all job kinds. MCP stdio tests cover export job polling.
+retry, and the original job kinds. `tests/tests/phase8_extraction.rs` covers the
+`document_extract` job, including its result and the unsupported path. MCP stdio
+tests cover export job polling.
 
 ```sh
 cargo test -p ontology-application
@@ -168,6 +177,8 @@ cargo test -p ontology-integration-tests --test phase4_jobs
 - No automatic retry/backoff; retry is manual.
 - No retention or cleanup policy.
 - Results can be large and are held in memory.
+- Extraction jobs cannot be interrupted mid-parse; cancellation is cooperative
+  between jobs only.
 - A cancelled running job can race with completion.
 
 ## Related

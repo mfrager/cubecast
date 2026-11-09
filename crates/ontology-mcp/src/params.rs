@@ -43,6 +43,8 @@ pub enum RdfAction {
     DeleteStatements,
     /// Remove every quad in a graph (destructive).
     ClearGraph,
+    /// Extract a document through MinerU, returning the requested projection.
+    ExtractDocument,
 }
 
 impl RdfAction {
@@ -66,6 +68,7 @@ impl RdfAction {
             Self::AddStatements => "add_statements",
             Self::DeleteStatements => "delete_statements",
             Self::ClearGraph => "clear_graph",
+            Self::ExtractDocument => "extract_document",
         }
     }
 }
@@ -272,6 +275,12 @@ pub struct CommonArgs {
     /// RDF syntax name.
     #[serde(default)]
     pub format: Option<String>,
+    /// Document extraction mode (`structured`, `text`, or `both`).
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Text format for extracted text (`markdown` or `plain`).
+    #[serde(default)]
+    pub text_format: Option<String>,
     /// Inline RDF document.
     #[serde(default)]
     pub data: Option<String>,
@@ -438,5 +447,10 @@ mod tests {
         let value = serde_json::to_value(RdfAction::SparqlUpdate).unwrap();
         assert_eq!(value, serde_json::json!("sparql_update"));
         assert_eq!(RdfAction::ListGraphs.as_str(), "list_graphs");
+        assert_eq!(RdfAction::ExtractDocument.as_str(), "extract_document");
+        assert_eq!(
+            serde_json::to_value(RdfAction::ExtractDocument).unwrap(),
+            serde_json::json!("extract_document")
+        );
     }
 }

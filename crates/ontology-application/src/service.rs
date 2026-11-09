@@ -1,12 +1,13 @@
 //! The shared application service used by every interface.
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use ontology_classify::ClassificationService;
 use ontology_core::command::{
-    CollectionResult, Command, CommandResult, ExternalCommand, JobCommand, OntologyCommand,
-    OperationReport, RdfCommand, ResourceResult, SemanticCommand, TaxonomyCommand,
+    CollectionResult, Command, CommandResult, DocumentCommand, ExternalCommand, JobCommand,
+    OntologyCommand, OperationReport, RdfCommand, ResourceResult, SemanticCommand, TaxonomyCommand,
 };
+use ontology_core::config::Config;
 use ontology_core::error::{Error, Result};
 use ontology_core::external::ExternalOntologyRegistry;
 use ontology_core::id::Id;
@@ -16,9 +17,11 @@ use ontology_core::owl::OntologyManager;
 use ontology_core::rdf::{OntologyService, RdfStore};
 use ontology_core::semantic::{EmbeddingProvider, InferenceEngine, VectorIndex};
 use ontology_core::skos::TaxonomyManager;
+use ontology_document::DocumentService;
 use ontology_embedding::{EmbeddingService, HashingEmbeddingProvider, InMemoryVectorIndex};
 use ontology_import::ExternalOntologyManager;
 use ontology_inference::RuleInferenceEngine;
+use ontology_mineru::MinerUExtractor;
 use ontology_owl::OwlManager;
 use ontology_skos::SkosManager;
 use serde::Serialize;
@@ -47,6 +50,7 @@ pub struct ApplicationService {
     inference: Arc<RuleInferenceEngine>,
     jobs: JobManager,
     namespaces: NamespaceRegistry,
+    documents: Arc<RwLock<Option<Arc<DocumentService>>>>,
 }
 
 impl ApplicationService {
@@ -74,6 +78,7 @@ impl ApplicationService {
             RuleInferenceEngine::new(Arc::clone(&store), ontology, taxonomy)
                 .with_external(registry),
         );
+        let documents = Arc::new(RwLock::new(None));
         let jobs = JobManager::new(
             Arc::new(JobContext {
                 classify: Arc::clone(&classify),
@@ -81,6 +86,7 @@ impl ApplicationService {
                 inference: Arc::clone(&inference),
                 store: Arc::clone(&store),
                 external: Arc::clone(&external),
+                documents: Arc::clone(&documents),
             }),
             crate::service::JOB_CONCURRENCY,
         );
@@ -95,6 +101,7 @@ impl ApplicationService {
             jobs,
             store,
             namespaces: NamespaceRegistry::with_builtins(),
+            documents,
         }
     }
 
@@ -103,6 +110,46 @@ impl ApplicationService {
     pub fn with_namespaces(mut self, namespaces: NamespaceRegistry) -> Self {
         self.namespaces = namespaces;
         self
+    }
+
+    /// Attaches a document extraction service.
+    #[must_use]
+    pub fn with_documents(self, documents: Arc<DocumentService>) -> Self {
+        if let Ok(mut slot) = self.documents.write() {
+            *slot = Some(documents);
+        }
+        self
+    }
+
+    /// Attaches MinerU extraction when `[extraction].enabled` is set.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Config`] when extraction is enabled in a build without
+    /// the `python` feature, or when the adapter configuration is invalid.
+    pub fn with_configured_documents(self, config: &Config) -> Result<Self> {
+        if !config.extraction.enabled {
+            return Ok(self);
+        }
+        if !ontology_mineru::python_enabled() {
+            return Err(Error::Config {
+                detail: "extraction.enabled requires ontology-mineru built with \
+                         `--features python` and a venv containing MinerU"
+                    .to_owned(),
+            });
+        }
+        let extractor = Arc::new(MinerUExtractor::from_config(&config.extraction)?);
+        let service = Arc::new(
+            DocumentService::new(extractor, config.extraction.clone())?
+                .with_rdf(Arc::clone(&self.store)),
+        );
+        Ok(self.with_documents(service))
+    }
+
+    /// Returns the document extraction service, when configured.
+    #[must_use]
+    pub fn documents(&self) -> Option<Arc<DocumentService>> {
+        self.documents.read().ok().and_then(|slot| slot.clone())
     }
 
     /// Returns the namespace registry.
@@ -352,6 +399,18 @@ impl ApplicationService {
                     data,
                 })
             }
+        }
+    }
+
+    async fn handle_document(&self, command: DocumentCommand) -> Result<CommandResult> {
+        let documents = self.documents().ok_or_else(|| Error::Unsupported {
+            operation: "document extraction is not configured".to_owned(),
+        })?;
+        match command {
+            DocumentCommand::Extract(request) => {
+                Ok(CommandResult::Document(documents.extract(request).await?))
+            }
+            DocumentCommand::Get { id } => Ok(CommandResult::Document(documents.get(&id).await?)),
         }
     }
 
@@ -922,6 +981,7 @@ impl OntologyService for ApplicationService {
             Command::External(command) => self.handle_external(command).await,
             Command::Semantic(command) => self.handle_semantic(command).await,
             Command::Job(command) => self.handle_job(command).await,
+            Command::Document(command) => self.handle_document(command).await,
         }
     }
 }
