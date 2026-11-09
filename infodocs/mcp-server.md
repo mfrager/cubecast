@@ -1,9 +1,9 @@
 # MCP Server (`ontology-mcp`)
 
-`ontology-mcp` exposes the application through exactly four MCP tools over
-stdio: `rdf`, `ontology`, `semantic`, and `jobs`. It translates actions into
-`Command` values, enforces an access policy, executes locally or forwards to the
-HTTP API, audits calls, and compacts large results.
+`ontology-mcp` exposes the application through exactly six MCP tools over
+stdio: `rdf`, `ontology`, `semantic`, `jobs`, `registry`, and `project`. It
+translates actions into `Command` values, enforces an access policy, executes
+locally or forwards to the HTTP API, audits calls, and compacts large results.
 
 Source: `crates/ontology-mcp/src/`.
 
@@ -95,6 +95,23 @@ Compound actions use `kind` (`class`, `property`, `ontology`, `scheme`,
 `submit`, `list`, `get`, `results`, `cancel`, `retry`. Submission uses `kind`
 plus the corresponding fields; see [background-jobs.md](background-jobs.md).
 
+### `registry`
+
+`catalog`, `asset`, `ingest`, `candidate`, `analyze`, `validate`, `publish`,
+`release`, `terms`, `imports`, `diff`, `reports`, `profile`. Operations use
+`operation` (`list`, `get`, `create`, `register`, `ingest`, `analyze`,
+`validate`, `publish`, `archive`, and so on). Path-addressed resources use
+stable asset/release/term keys; bodies and results carry full IRIs.
+
+Publication requires `confirm: true`. Remote ingestion is also gated by
+`ONTO_MCP_ALLOW_EXTERNAL` because it reaches outside the local graph.
+
+### `project`
+
+`project`, `goal`, `requirement`, `work`, `assign`, `transition`, `deliverable`,
+`accept`, `snapshot`, `overview`, `timeline`. Acceptance requires
+`confirm: true` and a linked release with passing validation evidence.
+
 ## Arguments
 
 All tools flatten a shared `CommonArgs` object. Important fields:
@@ -107,6 +124,8 @@ All tools flatten a shared `CommonArgs` object. Important fields:
 - `kind`, `operation`, `property_kind`, `mapping_kind`, `relation`;
 - `format`, `data`, `sparql`, `query`, `label`, `language`;
 - `source`, `mode`, `text_format` for `extract_document`;
+- `catalog`, `asset_iri`, `version`, `release`, `project`, `assignee`, `event`,
+  `acceptance_criteria` for registry/project actions;
 - `body` — full resource document for create/update and compound actions;
 - `instances`, `properties`, `attributes`, `strategies`, `strategy`;
 - `types`, `members`, `top_concepts`, `broader`, `narrower`;
@@ -150,9 +169,10 @@ Read-only-allowed examples:
 
 Writes include instance/schema/taxonomy/external changes, SPARQL Update, RDF
 import, embedding generation/deletion, classification persistence, review,
-override, reclassify, inference apply with `review`/`automatic`, and document
-extraction (`extract_document` may write the RDF mapping). Loading a stored
-run is not exposed as an MCP action.
+override, reclassify, inference apply with `review`/`automatic`, document
+extraction (`extract_document` may write the RDF mapping), registry catalog,
+ingest, publish, archive, and profile changes, and project work/deliverable
+changes. Loading a stored run is not exposed as an MCP action.
 
 In read-only mode, dispatch forces `ClassificationOptions.persist = false` even
 if the caller omitted it or sent `true`.
@@ -187,7 +207,9 @@ External import/sync (direct or as a job) require
 - external import/sync jobs.
 
 `review`/`automatic` inference is a write but is not in the "destructive" list;
-it is confirmation-gated separately.
+it is confirmation-gated separately. Registry publication/archive and project
+deliverable acceptance are also confirmation-gated even though they only append
+records.
 
 ### Dry run
 
@@ -241,7 +263,8 @@ content. Tool-level errors set `is_error`.
 Error kinds match `Error`: `invalid_iri`, `unknown_prefix`, `store_open`,
 `storage`, `parse`, `serialization`, `query`, `update`, `not_found`, `conflict`,
 `validation`, `invalid_request`, `config`, `io`, `unsupported`, `graph_registry`,
-`graph_open`, `graph_read_only`, `graph_partial`, `extraction`, `python`.
+`graph_open`, `graph_read_only`, `graph_partial`, `extraction`, `python`,
+`registry`, `project`, `limit`.
 
 ## Result compaction
 
@@ -278,18 +301,20 @@ include inline RDF or SPARQL, protect the log as sensitive data.
 
 - MCP transport: stdio only.
 - Server name `onto-mcp`, version `0.1.0`.
-- Exactly four tools are registered; the stdio test asserts this.
+- Exactly six tools are registered; the stdio test asserts this.
 - Tool annotations are coarse: `rdf`, `ontology`, and `semantic` are marked
-  destructive/non-read-only because they mix actions; `jobs` is marked
-  idempotent and not destructive.
+  destructive/non-read-only because they mix actions; `registry` is
+  non-destructive but non-read-only and open-world; `project` is non-destructive
+  and closed-world; `jobs` is marked idempotent and not destructive.
 - MCP resources, prompts, sampling, and HTTP transport are not implemented.
 
 ## Tests
 
 `crates/ontology-mcp/tests/stdio.rs` launches the binary and verifies:
 
-- exactly four tools;
+- exactly six tools;
 - read-only query success and write denial;
+- registry read/write policy and project write denial;
 - write create/get;
 - export job submission and polling;
 - destructive confirmation refusal and success.

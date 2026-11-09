@@ -16,7 +16,7 @@ fn binary() -> tokio::process::Command {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn exposes_four_tools_and_enforces_read_only() -> Result<(), Box<dyn Error>> {
+async fn exposes_six_tools_and_enforces_read_only() -> Result<(), Box<dyn Error>> {
     let mut command = binary();
     command
         .env("ONTO_MCP_ACCESS", "read-only")
@@ -31,7 +31,10 @@ async fn exposes_four_tools_and_enforces_read_only() -> Result<(), Box<dyn Error
         .map(|tool| tool.name.into_owned())
         .collect();
     names.sort();
-    assert_eq!(names, ["jobs", "ontology", "rdf", "semantic"]);
+    assert_eq!(
+        names,
+        ["jobs", "ontology", "project", "rdf", "registry", "semantic"]
+    );
 
     let result = client
         .call_tool(
@@ -45,6 +48,19 @@ async fn exposes_four_tools_and_enforces_read_only() -> Result<(), Box<dyn Error
     assert_eq!(body["success"], true);
     assert_eq!(body["result"]["resultType"], "boolean");
 
+    let catalogs = client
+        .call_tool(
+            CallToolRequestParams::new("registry").with_arguments(arguments(json!({
+                "action": "catalog",
+                "operation": "list"
+            }))),
+        )
+        .await?;
+    assert_eq!(
+        catalogs.structured_content.expect("registry list")["result"]["kind"],
+        "catalogs"
+    );
+
     let denied = client
         .call_tool(
             CallToolRequestParams::new("rdf").with_arguments(arguments(json!({
@@ -57,6 +73,36 @@ async fn exposes_four_tools_and_enforces_read_only() -> Result<(), Box<dyn Error
     assert_eq!(denied.is_error, Some(true));
     let body = denied.structured_content.expect("structured error");
     assert_eq!(body["error"]["kind"], "unsupported");
+
+    let denied = client
+        .call_tool(
+            CallToolRequestParams::new("registry").with_arguments(arguments(json!({
+                "action": "catalog",
+                "operation": "create",
+                "body": { "title": "Denied catalog" }
+            }))),
+        )
+        .await?;
+    assert_eq!(denied.is_error, Some(true));
+    assert_eq!(
+        denied.structured_content.expect("registry error")["error"]["kind"],
+        "unsupported"
+    );
+
+    let denied = client
+        .call_tool(
+            CallToolRequestParams::new("project").with_arguments(arguments(json!({
+                "action": "project",
+                "operation": "create",
+                "body": { "title": "Denied project" }
+            }))),
+        )
+        .await?;
+    assert_eq!(denied.is_error, Some(true));
+    assert_eq!(
+        denied.structured_content.expect("project error")["error"]["kind"],
+        "unsupported"
+    );
 
     client.close().await?;
     Ok(())

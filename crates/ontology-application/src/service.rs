@@ -5,9 +5,10 @@ use std::sync::{Arc, RwLock};
 use ontology_classify::ClassificationService;
 use ontology_core::command::{
     CollectionResult, Command, CommandResult, DocumentCommand, ExternalCommand, JobCommand,
-    OntologyCommand, OperationReport, RdfCommand, ResourceResult, SemanticCommand, TaxonomyCommand,
+    OntologyCommand, OperationReport, ProjectCommand, RdfCommand, RegistryCommand, ResourceResult,
+    SemanticCommand, TaxonomyCommand,
 };
-use ontology_core::config::Config;
+use ontology_core::config::{Config, ProjectConfig, RegistryConfig};
 use ontology_core::error::{Error, Result};
 use ontology_core::external::ExternalOntologyRegistry;
 use ontology_core::id::Id;
@@ -15,6 +16,7 @@ use ontology_core::model::{GraphName, QuadPattern};
 use ontology_core::namespace::NamespaceRegistry;
 use ontology_core::owl::OntologyManager;
 use ontology_core::rdf::{OntologyService, RdfStore};
+use ontology_core::registry_graph::{is_protected_registry_graph, REGISTRY_NAMESPACE};
 use ontology_core::semantic::{EmbeddingProvider, InferenceEngine, VectorIndex};
 use ontology_core::skos::TaxonomyManager;
 use ontology_document::DocumentService;
@@ -23,6 +25,8 @@ use ontology_import::ExternalOntologyManager;
 use ontology_inference::RuleInferenceEngine;
 use ontology_mineru::MinerUExtractor;
 use ontology_owl::OwlManager;
+use ontology_project::ProjectService;
+use ontology_registry::RegistryService;
 use ontology_skos::SkosManager;
 use serde::Serialize;
 
@@ -51,6 +55,8 @@ pub struct ApplicationService {
     jobs: JobManager,
     namespaces: NamespaceRegistry,
     documents: Arc<RwLock<Option<Arc<DocumentService>>>>,
+    registry: Option<Arc<RegistryService>>,
+    project: Option<Arc<ProjectService>>,
 }
 
 impl ApplicationService {
@@ -102,7 +108,49 @@ impl ApplicationService {
             store,
             namespaces: NamespaceRegistry::with_builtins(),
             documents,
+            registry: None,
+            project: None,
         }
+    }
+
+    /// Attaches the semantic registry using the configured artifact directory.
+    pub fn with_registry_config(mut self, config: &RegistryConfig) -> Result<Self> {
+        self.registry = Some(Arc::new(RegistryService::new(
+            Arc::clone(&self.store),
+            config.clone(),
+        )?));
+        Ok(self)
+    }
+
+    /// Attaches the project layer. A registry must already be configured.
+    pub fn with_project_config(mut self, config: &ProjectConfig) -> Result<Self> {
+        let registry = self.registry.clone().ok_or_else(|| Error::Config {
+            detail: "project layer requires the registry to be configured first".to_owned(),
+        })?;
+        self.project = Some(Arc::new(ProjectService::new(
+            Arc::clone(&self.store),
+            config.clone(),
+            registry,
+        )));
+        Ok(self)
+    }
+
+    /// Attaches both registry and project services from configuration.
+    pub fn with_semantic_layer(mut self, config: &Config) -> Result<Self> {
+        self = self.with_registry_config(&config.registry)?;
+        self.with_project_config(&config.project)
+    }
+
+    /// Returns the registry service when configured.
+    #[must_use]
+    pub fn registry(&self) -> Option<&Arc<RegistryService>> {
+        self.registry.as_ref()
+    }
+
+    /// Returns the project service when configured.
+    #[must_use]
+    pub fn project(&self) -> Option<&Arc<ProjectService>> {
+        self.project.as_ref()
     }
 
     /// Replaces the namespace registry.
@@ -347,6 +395,7 @@ impl ApplicationService {
             }
             RdfCommand::Query { sparql } => Ok(CommandResult::Query(self.store.query(&sparql)?)),
             RdfCommand::Update { sparql } => {
+                guard_registry_update(&sparql)?;
                 self.store.update(&sparql)?;
                 Ok(CommandResult::Report(OperationReport {
                     operation: "update".to_owned(),
@@ -368,6 +417,7 @@ impl ApplicationService {
                 }))
             }
             RdfCommand::ClearGraph { graph } => {
+                guard_graph(&graph)?;
                 let quads = self.store.get(QuadPattern::new().with_graph(graph))?;
                 self.store.delete(&quads)?;
                 Ok(CommandResult::Report(OperationReport {
@@ -381,6 +431,9 @@ impl ApplicationService {
                 data,
                 graph,
             } => {
+                if let Some(graph) = graph.as_ref() {
+                    guard_graph(graph)?;
+                }
                 let format = format.parse::<ontology_core::format::RdfFormat>()?;
                 let inserted =
                     self.store
@@ -400,6 +453,20 @@ impl ApplicationService {
                 })
             }
         }
+    }
+
+    async fn handle_registry(&self, command: RegistryCommand) -> Result<CommandResult> {
+        let registry = self.registry.as_ref().ok_or_else(|| Error::Unsupported {
+            operation: "registry is not configured".to_owned(),
+        })?;
+        Ok(CommandResult::Registry(registry.execute(&command).await?))
+    }
+
+    async fn handle_project(&self, command: ProjectCommand) -> Result<CommandResult> {
+        let project = self.project.as_ref().ok_or_else(|| Error::Unsupported {
+            operation: "project layer is not configured".to_owned(),
+        })?;
+        Ok(CommandResult::Project(project.execute(&command).await?))
     }
 
     async fn handle_document(&self, command: DocumentCommand) -> Result<CommandResult> {
@@ -982,6 +1049,43 @@ impl OntologyService for ApplicationService {
             Command::Semantic(command) => self.handle_semantic(command).await,
             Command::Job(command) => self.handle_job(command).await,
             Command::Document(command) => self.handle_document(command).await,
+            Command::Registry(command) => self.handle_registry(command).await,
+            Command::Project(command) => self.handle_project(command).await,
         }
     }
+}
+
+fn guard_graph(graph: &GraphName) -> Result<()> {
+    if let GraphName::Iri(iri) = graph {
+        if is_protected_registry_graph(iri) {
+            return Err(Error::GraphReadOnly {
+                graph: iri.to_string(),
+                store: "registry metadata is managed by the registry service".to_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn guard_registry_update(sparql: &str) -> Result<()> {
+    let lower = sparql.to_ascii_lowercase();
+    for prefix in [
+        "urn:onto:registry:release:",
+        "urn:onto:registry:analysis:",
+        "urn:onto:registry:validation:",
+    ] {
+        if lower.contains(prefix) {
+            return Err(Error::GraphReadOnly {
+                graph: prefix.to_owned(),
+                store: "registry release and report graphs are immutable".to_owned(),
+            });
+        }
+    }
+    if lower.contains("urn:onto:registry:provenance") || lower.contains(REGISTRY_NAMESPACE) {
+        return Err(Error::GraphReadOnly {
+            graph: REGISTRY_NAMESPACE.to_owned(),
+            store: "registry metadata is managed by the registry service".to_owned(),
+        });
+    }
+    Ok(())
 }

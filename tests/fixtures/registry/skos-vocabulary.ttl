@@ -1,0 +1,12 @@
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix ex: <https://example.org/> .
+
+ex:vocabulary a skos:ConceptScheme ;
+    dcterms:title "Example vocabulary" ;
+    skos:prefLabel "Example vocabulary" .
+
+ex:concept-one a skos:Concept ;
+    skos:inScheme ex:vocabulary ;
+    skos:prefLabel "Concept one" ;
+    skos:definition "First example concept." .

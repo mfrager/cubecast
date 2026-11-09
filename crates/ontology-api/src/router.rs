@@ -4,8 +4,9 @@
 //! the resulting [`CommandResult`] as JSON, so the API shares exactly the same
 //! behaviour as the CLI.
 
+use axum::body::Body;
 use axum::extract::{Path, Query, Request, State};
-use axum::http::header::{AUTHORIZATION, RETRY_AFTER};
+use axum::http::header::{AUTHORIZATION, CONTENT_DISPOSITION, CONTENT_TYPE, RETRY_AFTER};
 use axum::http::StatusCode;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -13,7 +14,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use ontology_core::command::{
     Command, CommandResult, DocumentCommand, ExternalCommand, JobCommand, OntologyCommand,
-    RdfCommand, SemanticCommand, TaxonomyCommand,
+    ProjectCommand, RdfCommand, RegistryCommand, SemanticCommand, TaxonomyCommand,
 };
 use ontology_core::document::ExtractionRequest;
 use ontology_core::error::Error;
@@ -26,7 +27,9 @@ use ontology_core::model::{
 use ontology_core::owl::{
     ClassQuery, GraphScope, Ontology, OwlClass, OwlProperty, PropertyKind, PropertyQuery,
 };
+use ontology_core::project::{NewProject, TaskEvent, WorkKind};
 use ontology_core::rdf::OntologyService;
+use ontology_core::registry::IngestRequest;
 use ontology_core::semantic::{ApplyPolicy, ClassificationOptions, InferenceOptions, VectorFilter};
 use ontology_core::skos::{Concept, ConceptCollection, ConceptScheme, SkosRelation, TaxonomyQuery};
 use serde::Deserialize;
@@ -185,7 +188,103 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/mappings/properties",
             get(list_property_mappings).post(map_property),
         )
-        .route("/api/v1/mappings/validate", post(validate_mappings));
+        .route("/api/v1/mappings/validate", post(validate_mappings))
+        .route("/api/v1/registry", post(registry_command))
+        .route(
+            "/api/v1/registry/catalogs",
+            get(list_catalogs).post(create_catalog),
+        )
+        .route("/api/v1/registry/catalogs/{id}", get(get_catalog))
+        .route(
+            "/api/v1/registry/catalogs/{id}/assets",
+            get(list_assets).post(register_asset),
+        )
+        .route("/api/v1/registry/assets/{key}", get(get_asset))
+        .route("/api/v1/registry/assets/{key}/releases", get(list_releases))
+        .route(
+            "/api/v1/registry/ingestions",
+            post(ingest).get(list_candidates),
+        )
+        .route("/api/v1/registry/ingestions/{id}", get(get_candidate))
+        .route(
+            "/api/v1/registry/ingestions/{id}/analyze",
+            post(analyze_candidate),
+        )
+        .route(
+            "/api/v1/registry/ingestions/{id}/validate",
+            post(validate_candidate),
+        )
+        .route(
+            "/api/v1/registry/ingestions/{id}/release-candidate",
+            post(release_candidate),
+        )
+        .route(
+            "/api/v1/registry/candidates/{id}/publish",
+            post(publish_candidate),
+        )
+        .route("/api/v1/registry/releases/{key}", get(get_release))
+        .route(
+            "/api/v1/registry/releases/{key}/archive",
+            post(archive_release),
+        )
+        .route("/api/v1/registry/releases/{key}/terms", get(release_terms))
+        .route(
+            "/api/v1/registry/releases/{key}/terms/{term}",
+            get(get_term),
+        )
+        .route(
+            "/api/v1/registry/releases/{key}/imports",
+            get(release_imports),
+        )
+        .route(
+            "/api/v1/registry/releases/{key}/statistics",
+            get(release_statistics),
+        )
+        .route(
+            "/api/v1/registry/releases/{key}/diff/{other}",
+            get(diff_releases),
+        )
+        .route("/api/v1/registry/releases/{key}/reports", get(list_reports))
+        .route(
+            "/api/v1/registry/download/{key}/{format}",
+            get(download_release),
+        )
+        .route(
+            "/api/v1/registry/profiles",
+            get(list_profiles).post(create_profile),
+        )
+        .route("/api/v1/registry/search", get(search_registry))
+        .route("/api/v1/projects", get(list_projects).post(create_project))
+        .route("/api/v1/projects/{project}", get(get_project))
+        .route(
+            "/api/v1/projects/{project}/goals",
+            get(list_goals).post(add_goal),
+        )
+        .route(
+            "/api/v1/projects/{project}/requirements",
+            get(list_requirements).post(add_requirement),
+        )
+        .route(
+            "/api/v1/projects/{project}/work",
+            get(list_work).post(add_work),
+        )
+        .route("/api/v1/work/{id}/transition", post(transition_work))
+        .route("/api/v1/work/{id}/assignments", post(assign_work))
+        .route(
+            "/api/v1/projects/{project}/dependencies",
+            get(project_dependencies),
+        )
+        .route(
+            "/api/v1/projects/{project}/deliverables",
+            get(list_deliverables).post(add_deliverable),
+        )
+        .route("/api/v1/deliverables/{id}/accept", post(accept_deliverable))
+        .route(
+            "/api/v1/projects/{project}/snapshots",
+            post(create_snapshot),
+        )
+        .route("/api/v1/projects/{project}/overview", get(project_overview))
+        .route("/api/v1/projects/{project}/timeline", get(project_timeline));
 
     let public = Router::new()
         .route("/api/v1/system/health", get(health))
@@ -372,8 +471,666 @@ async fn semantic_command(
     execute(&state, Command::Semantic(command)).await
 }
 
+async fn registry_command(
+    State(state): State<AppState>,
+    Json(command): Json<RegistryCommand>,
+) -> ApiResult {
+    execute(&state, Command::Registry(command)).await
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateCatalogBody {
+    title: String,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+async fn create_catalog(
+    State(state): State<AppState>,
+    Json(body): Json<CreateCatalogBody>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::CreateCatalog {
+            title: body.title,
+            description: body.description,
+        }),
+    )
+    .await
+}
+
+async fn list_catalogs(State(state): State<AppState>) -> ApiResult {
+    execute(&state, Command::Registry(RegistryCommand::ListCatalogs)).await
+}
+
+async fn get_catalog(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::GetCatalog { id: parse_id(&id)? }),
+    )
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct RegisterAssetBody {
+    #[serde(alias = "id", alias = "asset")]
+    asset_iri: Id,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    namespace: Option<String>,
+}
+
+async fn register_asset(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<RegisterAssetBody>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::RegisterAsset {
+            catalog: Some(parse_id(&id)?),
+            asset_iri: body.asset_iri,
+            title: body.title,
+            description: body.description,
+            namespace: body.namespace,
+        }),
+    )
+    .await
+}
+
+async fn list_assets(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::ListAssets {
+            catalog: Some(parse_id(&id)?),
+        }),
+    )
+    .await
+}
+
+async fn get_asset(State(state): State<AppState>, Path(key): Path<String>) -> ApiResult {
+    execute(&state, Command::Registry(RegistryCommand::GetAsset { key })).await
+}
+
+async fn list_releases(State(state): State<AppState>, Path(key): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::ListReleases { asset: Some(key) }),
+    )
+    .await
+}
+
+async fn ingest(State(state): State<AppState>, Json(request): Json<IngestRequest>) -> ApiResult {
+    execute(&state, Command::Registry(RegistryCommand::Ingest(request))).await
+}
+
+#[derive(Debug, Deserialize)]
+struct CandidateParams {
+    #[serde(default)]
+    asset: Option<String>,
+}
+
+async fn list_candidates(
+    State(state): State<AppState>,
+    Query(params): Query<CandidateParams>,
+) -> ApiResult {
+    let asset = params.asset.as_deref().map(parse_id).transpose()?;
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::ListCandidates { asset }),
+    )
+    .await
+}
+
+async fn get_candidate(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::GetCandidate { id: parse_id(&id)? }),
+    )
+    .await
+}
+
+async fn analyze_candidate(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::Analyze {
+            candidate: parse_id(&id)?,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ValidationParams {
+    #[serde(default)]
+    profile: Option<String>,
+}
+
+async fn validate_candidate(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<ValidationParams>,
+) -> ApiResult {
+    let profile = params.profile.as_deref().map(parse_id).transpose()?;
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::Validate {
+            candidate: parse_id(&id)?,
+            profile,
+        }),
+    )
+    .await
+}
+
+async fn release_candidate(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::GetCandidate { id: parse_id(&id)? }),
+    )
+    .await
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PublishParams {
+    #[serde(default)]
+    channel: Option<String>,
+}
+
+async fn publish_candidate(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<PublishParams>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::Publish {
+            candidate: parse_id(&id)?,
+            channel: params.channel,
+        }),
+    )
+    .await
+}
+
+async fn get_release(State(state): State<AppState>, Path(key): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::GetRelease { key }),
+    )
+    .await
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct SuccessorParams {
+    #[serde(default)]
+    successor: Option<String>,
+}
+
+async fn archive_release(
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+    Query(params): Query<SuccessorParams>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::ArchiveRelease {
+            key,
+            successor: params.successor,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct TermParams {
+    #[serde(default, alias = "q")]
+    query: Option<String>,
+    #[serde(default = "default_registry_page")]
+    limit: usize,
+    #[serde(default)]
+    offset: usize,
+}
+
+fn default_registry_page() -> usize {
+    ontology_core::registry::DEFAULT_PAGE_SIZE
+}
+
+async fn release_terms(
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+    Query(params): Query<TermParams>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::ReleaseTerms {
+            release: key,
+            query: params.query,
+            limit: params.limit,
+            offset: params.offset,
+        }),
+    )
+    .await
+}
+
+async fn get_term(
+    State(state): State<AppState>,
+    Path((key, term)): Path<(String, String)>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::GetTerm { release: key, term }),
+    )
+    .await
+}
+
+async fn release_imports(State(state): State<AppState>, Path(key): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::ReleaseImports { release: key }),
+    )
+    .await
+}
+
+async fn release_statistics(State(state): State<AppState>, Path(key): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::ReleaseStatistics { release: key }),
+    )
+    .await
+}
+
+async fn diff_releases(
+    State(state): State<AppState>,
+    Path((key, other)): Path<(String, String)>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::Diff {
+            left: key,
+            right: other,
+        }),
+    )
+    .await
+}
+
+async fn list_reports(State(state): State<AppState>, Path(key): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::ListReports { release: key }),
+    )
+    .await
+}
+
+async fn download_release(
+    State(state): State<AppState>,
+    Path((key, format)): Path<(String, String)>,
+) -> std::result::Result<Response, ApiError> {
+    let registry = state.service.registry().ok_or_else(|| {
+        ApiError(Error::Unsupported {
+            operation: "registry is not configured".to_owned(),
+        })
+    })?;
+    let (media_type, bytes) = registry.download(&key, &format)?;
+    Response::builder()
+        .header(CONTENT_TYPE, media_type)
+        .header(
+            CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{key}.{format}\""),
+        )
+        .body(Body::from(bytes))
+        .map_err(|error| {
+            ApiError(Error::Io {
+                detail: error.to_string(),
+            })
+        })
+}
+
+async fn create_profile(
+    State(state): State<AppState>,
+    Json(body): Json<CreateProfileBody>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::CreateProfile {
+            id: body.id,
+            title: body.title,
+            description: body.description,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateProfileBody {
+    id: Id,
+    title: String,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+async fn list_profiles(State(state): State<AppState>) -> ApiResult {
+    execute(&state, Command::Registry(RegistryCommand::ListProfiles)).await
+}
+
+#[derive(Debug, Deserialize)]
+struct RegistrySearchParams {
+    #[serde(alias = "query")]
+    q: String,
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default = "default_registry_page")]
+    limit: usize,
+    #[serde(default)]
+    offset: usize,
+}
+
+async fn search_registry(
+    State(state): State<AppState>,
+    Query(params): Query<RegistrySearchParams>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Registry(RegistryCommand::Search {
+            query: params.q,
+            kind: params.kind,
+            limit: params.limit,
+            offset: params.offset,
+        }),
+    )
+    .await
+}
+
+async fn create_project(State(state): State<AppState>, Json(body): Json<NewProject>) -> ApiResult {
+    execute(&state, Command::Project(ProjectCommand::Create(body))).await
+}
+
+async fn list_projects(State(state): State<AppState>) -> ApiResult {
+    execute(&state, Command::Project(ProjectCommand::List)).await
+}
+
+async fn get_project(State(state): State<AppState>, Path(project): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::Get {
+            project: parse_id(&project)?,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct AddGoalBody {
+    title: String,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+async fn add_goal(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+    Json(body): Json<AddGoalBody>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::AddGoal {
+            project: parse_id(&project)?,
+            title: body.title,
+            description: body.description,
+        }),
+    )
+    .await
+}
+
+async fn list_goals(State(state): State<AppState>, Path(project): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::ListGoals {
+            project: parse_id(&project)?,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct AddRequirementBody {
+    title: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    kind: Option<String>,
+}
+
+async fn add_requirement(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+    Json(body): Json<AddRequirementBody>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::AddRequirement {
+            project: parse_id(&project)?,
+            title: body.title,
+            description: body.description,
+            kind: body.kind,
+        }),
+    )
+    .await
+}
+
+async fn list_requirements(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::ListRequirements {
+            project: parse_id(&project)?,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct AddWorkBody {
+    kind: WorkKind,
+    title: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    parent: Option<Id>,
+    #[serde(default)]
+    assignee: Option<String>,
+    #[serde(default)]
+    due: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+async fn add_work(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+    Json(body): Json<AddWorkBody>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::AddWork {
+            project: parse_id(&project)?,
+            parent: body.parent,
+            kind: body.kind,
+            title: body.title,
+            description: body.description,
+            assignee: body.assignee,
+            due: body.due,
+        }),
+    )
+    .await
+}
+
+async fn list_work(State(state): State<AppState>, Path(project): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::ListWork {
+            project: parse_id(&project)?,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct TransitionBody {
+    event: TaskEvent,
+}
+
+async fn transition_work(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<TransitionBody>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::Transition {
+            work: parse_id(&id)?,
+            event: body.event,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct AssignBody {
+    assignee: String,
+}
+
+async fn assign_work(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<AssignBody>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::Assign {
+            work: parse_id(&id)?,
+            assignee: body.assignee,
+        }),
+    )
+    .await
+}
+
+async fn project_dependencies(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::Dependencies {
+            project: parse_id(&project)?,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct AddDeliverableBody {
+    title: String,
+    #[serde(default)]
+    kinds: Vec<String>,
+    #[serde(default)]
+    asset: Option<Id>,
+    #[serde(default)]
+    release: Option<Id>,
+    #[serde(default)]
+    acceptance_criteria: Vec<String>,
+}
+
+async fn add_deliverable(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+    Json(body): Json<AddDeliverableBody>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::AddDeliverable {
+            project: parse_id(&project)?,
+            title: body.title,
+            kinds: body.kinds,
+            asset: body.asset,
+            release: body.release,
+            acceptance_criteria: body.acceptance_criteria,
+        }),
+    )
+    .await
+}
+
+async fn list_deliverables(
+    State(state): State<AppState>,
+    Path(project): Path<String>,
+) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::ListDeliverables {
+            project: parse_id(&project)?,
+        }),
+    )
+    .await
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct AcceptBody {
+    #[serde(default)]
+    evidence: Option<String>,
+    #[serde(default)]
+    criterion: Option<String>,
+}
+
+async fn accept_deliverable(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    body: Option<Json<AcceptBody>>,
+) -> ApiResult {
+    let body = body.map(|Json(body)| body).unwrap_or_default();
+    execute(
+        &state,
+        Command::Project(ProjectCommand::Accept {
+            deliverable: parse_id(&id)?,
+            evidence: body.evidence,
+            criterion: body.criterion,
+        }),
+    )
+    .await
+}
+
+async fn create_snapshot(State(state): State<AppState>, Path(project): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::Snapshot {
+            project: parse_id(&project)?,
+        }),
+    )
+    .await
+}
+
+async fn project_overview(State(state): State<AppState>, Path(project): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::Overview {
+            project: parse_id(&project)?,
+        }),
+    )
+    .await
+}
+
+async fn project_timeline(State(state): State<AppState>, Path(project): Path<String>) -> ApiResult {
+    execute(
+        &state,
+        Command::Project(ProjectCommand::Timeline {
+            project: parse_id(&project)?,
+        }),
+    )
+    .await
+}
+
 fn parse_id(value: &str) -> std::result::Result<Id, ApiError> {
-    Ok(Id::new(value).map_err(ApiError::from)?)
+    Id::new(value).map_err(ApiError::from)
 }
 
 fn parse_graph(value: Option<&str>) -> std::result::Result<Option<GraphName>, ApiError> {

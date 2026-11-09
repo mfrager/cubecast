@@ -467,6 +467,9 @@ impl CatalogSnapshot {
     ///
     /// Returns [`Error::GraphRegistry`] when the graph is not registered.
     pub fn resolve_graph(&self, graph: &Id) -> Result<Arc<StoreHandle>> {
+        if ontology_core::registry_graph::is_dynamic_main_graph(graph) {
+            return Ok(Arc::clone(&self.main));
+        }
         self.graph_index
             .get(graph)
             .cloned()

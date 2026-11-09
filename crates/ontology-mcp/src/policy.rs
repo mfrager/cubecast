@@ -11,7 +11,8 @@ use std::path::PathBuf;
 
 use chrono::Utc;
 use ontology_core::command::{
-    Command, JobCommand, OntologyCommand, RdfCommand, SemanticCommand, TaxonomyCommand,
+    Command, JobCommand, OntologyCommand, ProjectCommand, RdfCommand, RegistryCommand,
+    SemanticCommand, TaxonomyCommand,
 };
 use ontology_core::error::{Error, Result};
 use ontology_core::job::JobRequest;
@@ -277,38 +278,65 @@ pub fn writes(command: &Command) -> bool {
         // Extraction may write the RDF mapping; loading a stored run does not.
         Command::Document(ontology_core::command::DocumentCommand::Extract(_)) => true,
         Command::Document(ontology_core::command::DocumentCommand::Get { .. }) => false,
+        Command::Registry(command) => !matches!(
+            command,
+            RegistryCommand::GetCatalog { .. }
+                | RegistryCommand::ListCatalogs
+                | RegistryCommand::GetAsset { .. }
+                | RegistryCommand::ListAssets { .. }
+                | RegistryCommand::GetCandidate { .. }
+                | RegistryCommand::ListCandidates { .. }
+                | RegistryCommand::GetRelease { .. }
+                | RegistryCommand::ListReleases { .. }
+                | RegistryCommand::ReleaseTerms { .. }
+                | RegistryCommand::GetTerm { .. }
+                | RegistryCommand::ReleaseImports { .. }
+                | RegistryCommand::ReleaseStatistics { .. }
+                | RegistryCommand::Diff { .. }
+                | RegistryCommand::Search { .. }
+                | RegistryCommand::ListReports { .. }
+                | RegistryCommand::ListProfiles
+        ),
+        Command::Project(command) => !matches!(
+            command,
+            ProjectCommand::Get { .. }
+                | ProjectCommand::List
+                | ProjectCommand::ListGoals { .. }
+                | ProjectCommand::ListRequirements { .. }
+                | ProjectCommand::ListWork { .. }
+                | ProjectCommand::ListDeliverables { .. }
+                | ProjectCommand::Overview { .. }
+                | ProjectCommand::Timeline { .. }
+                | ProjectCommand::Dependencies { .. }
+        ),
     }
 }
 
 /// Whether the command removes data or runs arbitrary SPARQL Update.
 #[must_use]
 pub fn destructive(command: &Command) -> bool {
-    match command {
+    matches!(
+        command,
         Command::Rdf(
             RdfCommand::DeleteInstance { .. }
-            | RdfCommand::DeleteStatements { .. }
-            | RdfCommand::Update { .. }
-            | RdfCommand::ClearGraph { .. },
-        ) => true,
-        Command::Ontology(
+                | RdfCommand::DeleteStatements { .. }
+                | RdfCommand::Update { .. }
+                | RdfCommand::ClearGraph { .. },
+        ) | Command::Ontology(
             OntologyCommand::DeleteClass { .. }
-            | OntologyCommand::DeleteProperty { .. }
-            | OntologyCommand::DeleteOntology { .. },
-        ) => true,
-        Command::Taxonomy(
+                | OntologyCommand::DeleteProperty { .. }
+                | OntologyCommand::DeleteOntology { .. },
+        ) | Command::Taxonomy(
             TaxonomyCommand::DeleteScheme { .. }
-            | TaxonomyCommand::DeleteConcept { .. }
-            | TaxonomyCommand::DeleteCollection { .. }
-            | TaxonomyCommand::MergeSchemes { .. },
-        ) => true,
-        Command::External(
+                | TaxonomyCommand::DeleteConcept { .. }
+                | TaxonomyCommand::DeleteCollection { .. }
+                | TaxonomyCommand::MergeSchemes { .. },
+        ) | Command::External(
             ontology_core::command::ExternalCommand::Delete { .. }
-            | ontology_core::command::ExternalCommand::Import(_)
-            | ontology_core::command::ExternalCommand::Sync { .. },
-        ) => true,
-        Command::Semantic(SemanticCommand::DeleteEmbeddings { .. }) => true,
-        _ => false,
-    }
+                | ontology_core::command::ExternalCommand::Import(_)
+                | ontology_core::command::ExternalCommand::Sync { .. },
+        ) | Command::Semantic(SemanticCommand::DeleteEmbeddings { .. })
+    )
 }
 
 /// Whether the command needs an explicit inline confirmation.
@@ -329,7 +357,10 @@ pub fn needs_confirmation(command: &Command) -> bool {
         Command::Job(JobCommand::Submit(
             JobRequest::ExternalImport(_) | JobRequest::ExternalSync { .. }
         ))
-    )
+    ) || matches!(
+        command,
+        Command::Registry(RegistryCommand::Publish { .. } | RegistryCommand::ArchiveRelease { .. })
+    ) || matches!(command, Command::Project(ProjectCommand::Accept { .. }))
 }
 
 /// Whether the command reaches outside the local graph.
@@ -342,6 +373,10 @@ pub fn external(command: &Command) -> bool {
             | Command::Job(JobCommand::Submit(
                 JobRequest::ExternalImport(_) | JobRequest::ExternalSync { .. }
             ))
+    ) || matches!(
+        command,
+        Command::Registry(RegistryCommand::Ingest(request))
+            if request.source.starts_with("http://") || request.source.starts_with("https://")
     )
 }
 

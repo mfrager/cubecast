@@ -4,7 +4,7 @@ Rust workspace for an RDF ontology management engine with Oxigraph as its
 storage and SPARQL layer. Phases 1–3 implement the RDF foundation, OWL and SKOS
 schema management, external ontologies, classification, embeddings, and
 inference. Phase 4 adds the asynchronous HTTP API, background jobs, and the
-remote administration CLI. Phase 5 adds the four-tool MCP server for LLM agents,
+remote administration CLI. Phase 5 adds the MCP server for LLM agents (now six tools),
 with read-only defaults, explicit destructive/external gates, and audit logging.
 
 ## Layout
@@ -22,7 +22,7 @@ crates/
   ontology-application/  instance, statement, and schema services; command dispatch
   ontology-api/          Axum HTTP API, OpenAPI document, server binary
   ontology-cli/          Clap + Reqwest `onto` CLI and interactive shell
-  ontology-mcp/          four-tool MCP server over stdio
+  ontology-mcp/          six-tool MCP server over stdio
 ontologies/system-owl.ttl  internal schema describing managed resources
 docs/mcp.md              MCP tools, safety model, and agent workflows
 tests/                   integration tests (workspace member)
@@ -92,8 +92,9 @@ table (`--output`); `--dry-run` prints the command without sending it.
 cargo run -p ontology-mcp
 ```
 
-The server speaks MCP over stdio and exposes exactly four tools: `rdf`,
-`ontology`, `semantic`, and `jobs`. It is read-only by default. Set
+The server speaks MCP over stdio and exposes exactly six tools: `rdf`,
+`ontology`, `semantic`, `jobs`, `registry`, and `project`. It is read-only by
+default. Set
 `ONTO_MCP_ACCESS=read-write` for writes, `ONTO_MCP_ALLOW_DESTRUCTIVE=true` for
 deletes and SPARQL Update, and `ONTO_MCP_ALLOW_EXTERNAL=true` for external
 ontology imports. Destructive calls still require `"confirm": true`, and

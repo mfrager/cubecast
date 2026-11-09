@@ -20,6 +20,23 @@ acme = "https://acme.example/"
 max_blocking_tasks = 8
 max_page_size = 1000
 
+# Semantic registry. Optional; the values below are the defaults. Remote
+# ingestion is off unless both settings are provided, and remote_hosts must
+# name exact hosts (`["*"]` opts into every host).
+# [registry]
+# artifact_dir = "./data/registry"
+# max_source_bytes = 52428800
+# max_upload_bytes = 52428800
+# max_sync_bytes = 4194304
+# allow_remote = false
+# remote_hosts = []
+# require_resolved_imports = false
+# public_base_url = "http://127.0.0.1:8080"
+
+# Project-management identifiers. Optional; this is the default prefix.
+# [project]
+# base_iri = "urn:onto:project:"
+
 # Document extraction through MinerU. Disabled by default; enabling it requires
 # a build of `ontology-mineru` with `--features python` and a venv containing
 # MinerU. See docs/operations.md.

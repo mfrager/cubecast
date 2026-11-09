@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::document::{ExtractionMode, TextFormat};
 use crate::error::{Error, Result};
+use crate::id::Id;
 use crate::namespace::NamespaceRegistry;
 
 /// Where the RDF store lives.
@@ -144,6 +145,89 @@ impl GraphsConfig {
     #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.enabled
+    }
+}
+
+fn default_registry_artifact_dir() -> PathBuf {
+    PathBuf::from("./data/registry")
+}
+
+fn default_max_source_bytes() -> u64 {
+    50 * 1024 * 1024
+}
+
+fn default_max_sync_bytes() -> u64 {
+    4 * 1024 * 1024
+}
+
+fn default_public_base_url() -> String {
+    "http://127.0.0.1:8080".to_owned()
+}
+
+fn default_project_base_iri() -> String {
+    "urn:onto:project:".to_owned()
+}
+
+/// Semantic registry settings.
+///
+/// The section is optional; defaults keep local ingestion available. Remote
+/// access is always opt-in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistryConfig {
+    /// Directory for content-addressed source and distribution artifacts.
+    #[serde(default = "default_registry_artifact_dir")]
+    pub artifact_dir: PathBuf,
+    /// Maximum local or remote source size.
+    #[serde(default = "default_max_source_bytes")]
+    pub max_source_bytes: u64,
+    /// Maximum multipart upload size.
+    #[serde(default = "default_max_source_bytes")]
+    pub max_upload_bytes: u64,
+    /// Sources above this size use the background job path.
+    #[serde(default = "default_max_sync_bytes")]
+    pub max_sync_bytes: u64,
+    /// Allow HTTP(S) source retrieval.
+    #[serde(default)]
+    pub allow_remote: bool,
+    /// Exact host names allowed for remote retrieval; `*` opts into all hosts.
+    #[serde(default)]
+    pub remote_hosts: Vec<String>,
+    /// Require every import to resolve before publication.
+    #[serde(default)]
+    pub require_resolved_imports: bool,
+    /// Base URL used to render human-facing download links.
+    #[serde(default = "default_public_base_url")]
+    pub public_base_url: String,
+}
+
+impl Default for RegistryConfig {
+    fn default() -> Self {
+        Self {
+            artifact_dir: default_registry_artifact_dir(),
+            max_source_bytes: default_max_source_bytes(),
+            max_upload_bytes: default_max_source_bytes(),
+            max_sync_bytes: default_max_sync_bytes(),
+            allow_remote: false,
+            remote_hosts: Vec::new(),
+            require_resolved_imports: false,
+            public_base_url: default_public_base_url(),
+        }
+    }
+}
+
+/// Project-management settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectConfig {
+    /// Absolute IRI prefix for generated project and work identifiers.
+    #[serde(default = "default_project_base_iri")]
+    pub base_iri: String,
+}
+
+impl Default for ProjectConfig {
+    fn default() -> Self {
+        Self {
+            base_iri: default_project_base_iri(),
+        }
     }
 }
 
@@ -306,6 +390,12 @@ pub struct Config {
     /// Multi-graph registry settings.
     #[serde(default)]
     pub graphs: GraphsConfig,
+    /// Semantic registry settings.
+    #[serde(default)]
+    pub registry: RegistryConfig,
+    /// Project-management settings.
+    #[serde(default)]
+    pub project: ProjectConfig,
     /// Operational limits.
     #[serde(default)]
     pub limits: LimitsConfig,
@@ -380,7 +470,86 @@ impl Config {
         }
         self.namespace_registry()?;
         self.graphs_config()?;
+        self.registry_config()?;
+        self.project_config()?;
         self.extraction_config()?;
+        Ok(())
+    }
+
+    /// Validates registry paths, limits, and remote-source policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Config`] when a path escapes its root, a size is zero,
+    /// or remote access is enabled without an allowlist.
+    pub fn registry_config(&self) -> Result<()> {
+        let registry = &self.registry;
+        if registry.artifact_dir.as_os_str().is_empty()
+            || registry
+                .artifact_dir
+                .components()
+                .any(|component| component == Component::ParentDir)
+        {
+            return Err(Error::Config {
+                detail: format!(
+                    "registry.artifact_dir {} must be non-empty and must not contain `..`",
+                    registry.artifact_dir.display()
+                ),
+            });
+        }
+        for (name, value) in [
+            ("max_source_bytes", registry.max_source_bytes),
+            ("max_upload_bytes", registry.max_upload_bytes),
+            ("max_sync_bytes", registry.max_sync_bytes),
+        ] {
+            if value == 0 {
+                return Err(Error::Config {
+                    detail: format!("registry.{name} must be greater than zero"),
+                });
+            }
+        }
+        if registry.max_sync_bytes > registry.max_source_bytes {
+            return Err(Error::Config {
+                detail: "registry.max_sync_bytes must not exceed max_source_bytes".to_owned(),
+            });
+        }
+        if registry.allow_remote && registry.remote_hosts.is_empty() {
+            return Err(Error::Config {
+                detail: "registry.allow_remote = true requires registry.remote_hosts".to_owned(),
+            });
+        }
+        for host in &registry.remote_hosts {
+            let host = host.trim();
+            if host.is_empty() || (host != "*" && host.contains('*')) {
+                return Err(Error::Config {
+                    detail: format!("invalid registry.remote_hosts entry {host:?}"),
+                });
+            }
+        }
+        if !(registry.public_base_url.starts_with("http://")
+            || registry.public_base_url.starts_with("https://"))
+        {
+            return Err(Error::Config {
+                detail: "registry.public_base_url must be an HTTP(S) URL".to_owned(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Validates the project identifier prefix.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Config`] when the prefix is not an absolute IRI.
+    pub fn project_config(&self) -> Result<()> {
+        if Id::new(self.project.base_iri.as_str()).is_err() {
+            return Err(Error::Config {
+                detail: format!(
+                    "project.base_iri {:?} must be an absolute IRI",
+                    self.project.base_iri
+                ),
+            });
+        }
         Ok(())
     }
 

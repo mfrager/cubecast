@@ -21,12 +21,15 @@ fn status_for(error: &Error) -> StatusCode {
         | Error::UnknownPrefix { .. }
         | Error::Invalid { .. }
         | Error::Validation { .. }
-        | Error::Parse { .. }
         | Error::Query { .. }
         | Error::Update { .. }
         | Error::Config { .. }
         | Error::GraphRegistry { .. } => StatusCode::BAD_REQUEST,
-        Error::Extraction { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+        Error::Extraction { .. }
+        | Error::Registry { .. }
+        | Error::Project { .. }
+        | Error::Parse { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+        Error::Limit { .. } => StatusCode::PAYLOAD_TOO_LARGE,
         Error::Python { .. } => StatusCode::SERVICE_UNAVAILABLE,
         Error::NotFound { .. } => StatusCode::NOT_FOUND,
         Error::Conflict { .. } => StatusCode::CONFLICT,
@@ -64,6 +67,9 @@ fn kind_for(error: &Error) -> &'static str {
         Error::GraphPartial { .. } => "graph_partial",
         Error::Extraction { .. } => "extraction",
         Error::Python { .. } => "python",
+        Error::Registry { .. } => "registry",
+        Error::Project { .. } => "project",
+        Error::Limit { .. } => "limit",
     }
 }
 

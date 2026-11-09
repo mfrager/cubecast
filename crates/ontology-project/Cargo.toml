@@ -1,0 +1,19 @@
+[package]
+name = "ontology-project"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Project management layer for semantic asset production"
+
+[dependencies]
+ontology-core.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+serde.workspace = true
+ulid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

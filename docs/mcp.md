@@ -1,8 +1,9 @@
 # MCP server
 
 `ontology-mcp` is the agent-facing interface. It exposes the whole engine
-through four tools instead of dozens of narrow endpoints, and every action is
+through six tools instead of dozens of narrow endpoints, and every action is
 translated into the same `Command` values used by the HTTP API and the CLI.
+The tools are `rdf`, `ontology`, `semantic`, `jobs`, `registry`, and `project`.
 
 ## Running
 

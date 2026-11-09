@@ -1,0 +1,9 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <https://example.org/> .
+
+ex:PlanningShape a sh:NodeShape ;
+    sh:targetClass ex:Plan ;
+    sh:property [
+        sh:path ex:hasStep ;
+        sh:minCount 0
+    ] .

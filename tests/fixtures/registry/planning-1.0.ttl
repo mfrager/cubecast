@@ -1,0 +1,21 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix ex: <https://example.org/> .
+
+ex:planning a owl:Ontology ;
+    owl:versionInfo "1.0" ;
+    dcterms:title "Planning ontology" ;
+    dcterms:description "Small planning ontology for registry tests" ;
+    owl:imports <https://example.org/dependency> .
+
+ex:Plan a owl:Class ;
+    rdfs:label "Plan" ;
+    rdfs:comment "A plan of work." .
+
+ex:hasStep a owl:ObjectProperty ;
+    rdfs:label "has step" ;
+    rdfs:domain ex:Plan .
+
+ex:stepCount a owl:DatatypeProperty ;
+    rdfs:label "step count" .

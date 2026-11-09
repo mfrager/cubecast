@@ -41,6 +41,18 @@ pub const SCHEMA: &str = "https://schema.org/";
 pub const FOAF: &str = "http://xmlns.com/foaf/0.1/";
 /// SHACL namespace.
 pub const SH: &str = "http://www.w3.org/ns/shacl#";
+/// DCAT 3 namespace.
+pub const DCAT: &str = "http://www.w3.org/ns/dcat#";
+/// ADMS namespace.
+pub const ADMS: &str = "http://www.w3.org/ns/adms#";
+/// PROF namespace.
+pub const PROF: &str = "http://www.w3.org/ns/prof#";
+/// VoID namespace.
+pub const VOID: &str = "http://rdfs.org/ns/void#";
+/// Registry extension namespace.
+pub const OREG: &str = "urn:onto:registry:";
+/// Project extension namespace.
+pub const PM: &str = "urn:onto:project:";
 /// Namespace of the system's internal OWL vocabulary.
 pub const ONTO: &str = "urn:onto:schema:";
 /// Namespace of reserved system graphs.
@@ -81,6 +93,12 @@ impl NamespaceRegistry {
             ("foaf", FOAF),
             ("prov", PROV),
             ("sh", SH),
+            ("dcat", DCAT),
+            ("adms", ADMS),
+            ("prof", PROF),
+            ("void", VOID),
+            ("oreg", OREG),
+            ("pm", PM),
             ("onto", ONTO),
             ("system", SYSTEM),
             ("data", DATA),

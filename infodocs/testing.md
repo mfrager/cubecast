@@ -219,7 +219,8 @@ tests spawn the real `ontology-mcp` binary with `TokioChildProcess`.
 
 `crates/ontology-mcp/tests/stdio.rs`:
 
-- exactly four tools;
+- exactly six tools;
+- registry read/write policy and project write denial;
 - read-only denial;
 - create/get;
 - export-job polling;

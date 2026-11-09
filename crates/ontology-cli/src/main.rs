@@ -64,6 +64,11 @@ async fn perform(connection: Connection, action: Action) -> CliResult<()> {
             "dryRun": connection.dry_run,
         })),
         Action::Watch { id, interval_secs } => watch(&connection, &id, interval_secs).await,
+        Action::Download {
+            key,
+            format,
+            output,
+        } => connection.download(&key, &format, &output).await,
         Action::Command(invocation) => {
             if let Some(prompt) = confirmation(&invocation.command) {
                 connection.confirm(prompt)?;
@@ -93,6 +98,13 @@ fn confirmation(command: &Command) -> Option<&'static str> {
         Command::External(ExternalCommand::Delete { .. }) => Some("Delete this external ontology?"),
         Command::Semantic(SemanticCommand::DeleteEmbeddings { .. }) => {
             Some("Delete these embeddings?")
+        }
+        Command::Registry(
+            ontology_core::command::RegistryCommand::Publish { .. }
+            | ontology_core::command::RegistryCommand::ArchiveRelease { .. },
+        ) => Some("Publish or archive this release?"),
+        Command::Project(ontology_core::command::ProjectCommand::Accept { .. }) => {
+            Some("Accept this deliverable against registry evidence?")
         }
         _ => None,
     }
@@ -171,6 +183,15 @@ async fn shell(connection: Connection) -> CliResult<()> {
         match cli::action(parsed.command) {
             Ok(Action::Shell) => eprintln!("onto: already in the shell"),
             Ok(Action::Server(_)) => eprintln!("onto: start the server from a separate process"),
+            Ok(Action::Download {
+                key,
+                format,
+                output,
+            }) => {
+                if let Err(error) = connection.download(&key, &format, &output).await {
+                    eprintln!("onto: {error}");
+                }
+            }
             Ok(action) => {
                 if let Err(error) = perform(connection.clone(), action).await {
                     eprintln!("onto: {error}");

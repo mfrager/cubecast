@@ -211,7 +211,109 @@ impl JobsAction {
     }
 }
 
-/// Fields shared by all four tools.
+/// Registry tool actions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RegistryAction {
+    /// Catalog list/get/create.
+    Catalog,
+    /// Asset list/get/register.
+    Asset,
+    /// Ingest a source into a candidate.
+    Ingest,
+    /// Candidate list/get.
+    Candidate,
+    /// Recompute candidate analysis.
+    Analyze,
+    /// Validate a candidate.
+    Validate,
+    /// Publish a candidate.
+    Publish,
+    /// Release list/get/terms/term/imports/stats/diff/reports/archive.
+    Release,
+    /// Search release terms.
+    Terms,
+    /// List release imports.
+    Imports,
+    /// Compare two releases.
+    Diff,
+    /// List validation reports.
+    Reports,
+    /// Profile list/create.
+    Profile,
+}
+
+impl RegistryAction {
+    /// Stable action name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Catalog => "catalog",
+            Self::Asset => "asset",
+            Self::Ingest => "ingest",
+            Self::Candidate => "candidate",
+            Self::Analyze => "analyze",
+            Self::Validate => "validate",
+            Self::Publish => "publish",
+            Self::Release => "release",
+            Self::Terms => "terms",
+            Self::Imports => "imports",
+            Self::Diff => "diff",
+            Self::Reports => "reports",
+            Self::Profile => "profile",
+        }
+    }
+}
+
+/// Project tool actions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectAction {
+    /// Project list/get/create/update.
+    Project,
+    /// Goal add/list.
+    Goal,
+    /// Requirement add/list.
+    Requirement,
+    /// Work add/list.
+    Work,
+    /// Assign a work item.
+    Assign,
+    /// Transition a work item.
+    Transition,
+    /// Deliverable add/list/link.
+    Deliverable,
+    /// Accept a deliverable.
+    Accept,
+    /// Record a snapshot.
+    Snapshot,
+    /// Project overview.
+    Overview,
+    /// Project timeline.
+    Timeline,
+}
+
+impl ProjectAction {
+    /// Stable action name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::Goal => "goal",
+            Self::Requirement => "requirement",
+            Self::Work => "work",
+            Self::Assign => "assign",
+            Self::Transition => "transition",
+            Self::Deliverable => "deliverable",
+            Self::Accept => "accept",
+            Self::Snapshot => "snapshot",
+            Self::Overview => "overview",
+            Self::Timeline => "timeline",
+        }
+    }
+}
+
+/// Fields shared by all tools.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CommonArgs {
     /// Primary resource IRI (instance, class, property, concept, scheme, job,
@@ -420,6 +522,26 @@ pub struct SemanticArgs {
 pub struct JobsArgs {
     /// Job operation.
     pub action: JobsAction,
+    /// Operation parameters.
+    #[serde(flatten)]
+    pub args: CommonArgs,
+}
+
+/// Input for the `registry` tool.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct RegistryArgs {
+    /// Registry operation.
+    pub action: RegistryAction,
+    /// Operation parameters.
+    #[serde(flatten)]
+    pub args: CommonArgs,
+}
+
+/// Input for the `project` tool.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ProjectArgs {
+    /// Project operation.
+    pub action: ProjectAction,
     /// Operation parameters.
     #[serde(flatten)]
     pub args: CommonArgs,

@@ -25,18 +25,22 @@ pub mod job;
 pub mod model;
 pub mod namespace;
 pub mod owl;
+pub mod project;
 pub mod rdf;
+pub mod registry;
+pub mod registry_graph;
 pub mod semantic;
 pub mod skos;
 pub mod tracing;
 
 pub use command::{
     CollectionResult, Command, CommandResult, ExternalCommand, JobCommand, OntologyCommand,
-    OperationReport, RdfCommand, ResourceResult, SemanticCommand, TaxonomyCommand,
+    OperationReport, ProjectCommand, RdfCommand, RegistryCommand, ResourceResult, SemanticCommand,
+    TaxonomyCommand,
 };
 pub use config::{
-    Config, ExtractionConfig, GraphsConfig, GraphsSync, LimitsConfig, LoggingConfig,
-    StorageBackend, StorageConfig, UpdatePolicy,
+    Config, ExtractionConfig, GraphsConfig, GraphsSync, LimitsConfig, LoggingConfig, ProjectConfig,
+    RegistryConfig, StorageBackend, StorageConfig, UpdatePolicy,
 };
 pub use document::CacheIdentity;
 pub use document::{
@@ -66,7 +70,24 @@ pub use owl::{
     OwlProperty, PropertyCharacteristic, PropertyKind, PropertyQuery, Restriction, Severity,
     ValidationIssue, ValidationReport,
 };
+pub use project::{
+    AssetSummary, Deliverable, DeliverableStatus, DependencyEdge, Goal, NewProject, Project,
+    ProjectOverview, ProjectResult, ProjectSnapshot, ProjectStatus, ReleaseSummary, Requirement,
+    SemanticAssetCatalog, TaskEvent, TimelineEntry, WorkItem, WorkKind, WorkStatus,
+};
 pub use rdf::{OntologyService, RdfStore, RdfTransaction};
+pub use registry::{
+    ArtifactRef, Asset, Catalog, DiffReport, Distribution, ImportDependency, IngestRequest,
+    Profile, RegistryResult, Release, ReleaseCandidate, ReleaseStatistics, SearchHit, SearchKind,
+    SearchResult, TermSummary,
+};
+pub use registry_graph::{
+    analysis_graph, catalog_graph, is_dynamic_main_graph, is_project_graph,
+    is_protected_registry_graph, is_registry_graph, project_core_graph, project_deliverables_graph,
+    project_events_graph, project_goals_graph, project_governance_graph, project_plans_graph,
+    project_requirements_graph, project_resources_graph, project_work_graph, release_graph,
+    staging_graph, validation_graph,
+};
 pub use semantic::{
     ApplyPolicy, AttributeMatch, Classification, ClassificationBatch, ClassificationOptions,
     ClassificationRule, ClassificationStrategy, Classifier, Embedding, EmbeddingProvider,

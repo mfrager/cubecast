@@ -6,8 +6,8 @@
 use std::path::PathBuf;
 
 use ontology_core::command::{
-    Command, DocumentCommand, ExternalCommand, JobCommand, OntologyCommand, RdfCommand,
-    SemanticCommand, TaxonomyCommand,
+    Command, DocumentCommand, ExternalCommand, JobCommand, OntologyCommand, ProjectCommand,
+    RdfCommand, RegistryCommand, SemanticCommand, TaxonomyCommand,
 };
 use ontology_core::document::{ExtractionMode, ExtractionRequest, TextFormat};
 use ontology_core::error::{Error, Result};
@@ -24,6 +24,8 @@ use ontology_core::namespace::NamespaceRegistry;
 use ontology_core::owl::{
     ClassQuery, GraphScope, Ontology, OwlClass, OwlProperty, PropertyKind, PropertyQuery,
 };
+use ontology_core::project::{NewProject, TaskEvent, WorkKind};
+use ontology_core::registry::IngestRequest;
 use ontology_core::semantic::{
     ApplyPolicy, ClassificationOptions, ClassificationStrategy, InferenceOptions,
 };
@@ -31,7 +33,10 @@ use ontology_core::skos::{Concept, ConceptScheme, SkosRelation, TaxonomyQuery};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::params::{CommonArgs, JobsAction, OntologyAction, RdfAction, SemanticAction};
+use crate::params::{
+    CommonArgs, JobsAction, OntologyAction, ProjectAction, RdfAction, RegistryAction,
+    SemanticAction,
+};
 
 /// Resolves prefixed names against the configured namespace registry.
 #[derive(Debug, Clone)]
@@ -1207,6 +1212,381 @@ fn job_request(args: &CommonArgs, context: &DispatchContext<'_>) -> Result<JobRe
              infer_batch, rdf_import, rdf_export, external_import, or external_sync"
         ))),
     }
+}
+
+fn body_value<'a>(args: &'a CommonArgs, key: &str) -> Option<&'a Value> {
+    args.body.as_ref().and_then(|body| body.get(key))
+}
+
+fn body_text<'a>(args: &'a CommonArgs, key: &str) -> Option<&'a str> {
+    body_value(args, key).and_then(Value::as_str)
+}
+
+fn required_text<'a>(value: Option<&'a str>, action: &str, field: &str) -> Result<&'a str> {
+    value.ok_or_else(|| Error::validation(format!("{action} requires {field:?}")))
+}
+
+fn title(args: &CommonArgs, action: &str) -> Result<String> {
+    body_text(args, "title")
+        .or(args.label.as_deref())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| Error::validation(format!("{action} requires \"title\"")))
+}
+
+fn body_id(args: &CommonArgs, resolver: &Resolver, key: &str) -> Result<Option<Id>> {
+    body_text(args, key)
+        .map(|value| resolver.id(value))
+        .transpose()
+}
+
+/// Translates a `registry` tool request.
+///
+/// # Errors
+///
+/// Returns [`Error::Validation`] for missing or malformed fields.
+pub fn registry_command(
+    action: RegistryAction,
+    args: &CommonArgs,
+    context: &DispatchContext<'_>,
+) -> Result<Command> {
+    let name = action.as_str();
+    let operation = args.operation.as_deref().unwrap_or(match action {
+        RegistryAction::Catalog | RegistryAction::Asset | RegistryAction::Profile => "list",
+        RegistryAction::Candidate | RegistryAction::Release => "get",
+        RegistryAction::Ingest => "ingest",
+        RegistryAction::Analyze => "analyze",
+        RegistryAction::Validate => "validate",
+        RegistryAction::Publish => "publish",
+        RegistryAction::Terms => "terms",
+        RegistryAction::Imports => "imports",
+        RegistryAction::Diff => "diff",
+        RegistryAction::Reports => "reports",
+    });
+    let command = match (action, operation) {
+        (RegistryAction::Catalog, "list") => RegistryCommand::ListCatalogs,
+        (RegistryAction::Catalog, "get") => RegistryCommand::GetCatalog {
+            id: context
+                .resolver
+                .id(required(args.target.as_ref(), name, "target")?)?,
+        },
+        (RegistryAction::Catalog, "create") => RegistryCommand::CreateCatalog {
+            title: title(args, "catalog create")?,
+            description: body_text(args, "description").map(ToOwned::to_owned),
+        },
+        (RegistryAction::Asset, "list") => RegistryCommand::ListAssets {
+            catalog: body_id(args, context.resolver, "catalog")?,
+        },
+        (RegistryAction::Asset, "get") => RegistryCommand::GetAsset {
+            key: required(args.target.as_ref(), name, "target")?.to_owned(),
+        },
+        (RegistryAction::Asset, "register") => RegistryCommand::RegisterAsset {
+            catalog: body_id(args, context.resolver, "catalog")?,
+            asset_iri: context.resolver.id(required_text(
+                body_text(args, "asset_iri")
+                    .or(args.target.as_deref())
+                    .or(args.ontology.as_deref()),
+                "asset register",
+                "asset_iri",
+            )?)?,
+            title: body_text(args, "title")
+                .or(args.label.as_deref())
+                .map(ToOwned::to_owned),
+            description: body_text(args, "description").map(ToOwned::to_owned),
+            namespace: body_text(args, "namespace").map(ToOwned::to_owned),
+        },
+        (RegistryAction::Ingest, _) => {
+            if let Some(body) = &args.body {
+                if body.get("source").is_some() {
+                    RegistryCommand::Ingest(parse_body(body.clone())?)
+                } else {
+                    return Err(Error::validation("ingest body requires \"source\""));
+                }
+            } else {
+                let source = required(args.source.as_ref(), name, "source")?;
+                RegistryCommand::Ingest(IngestRequest {
+                    catalog: body_id(args, context.resolver, "catalog")?,
+                    source: source.to_owned(),
+                    data: args.data.clone(),
+                    asset_iri: body_id(args, context.resolver, "asset_iri")?,
+                    version: body_text(args, "version")
+                        .or(args.id.as_deref())
+                        .map(ToOwned::to_owned),
+                    format: args.format.clone(),
+                    title: body_text(args, "title")
+                        .or(args.label.as_deref())
+                        .map(ToOwned::to_owned),
+                })
+            }
+        }
+        (RegistryAction::Candidate, "list") => RegistryCommand::ListCandidates {
+            asset: body_id(args, context.resolver, "asset")?,
+        },
+        (RegistryAction::Candidate, "get") => RegistryCommand::GetCandidate {
+            id: context.resolver.id(required(
+                args.id.as_ref().or(args.target.as_ref()),
+                name,
+                "id",
+            )?)?,
+        },
+        (RegistryAction::Analyze, _) => RegistryCommand::Analyze {
+            candidate: context.resolver.id(required(
+                args.id.as_ref().or(args.target.as_ref()),
+                name,
+                "candidate",
+            )?)?,
+        },
+        (RegistryAction::Validate, _) => RegistryCommand::Validate {
+            candidate: context.resolver.id(required(
+                args.id.as_ref().or(args.target.as_ref()),
+                name,
+                "candidate",
+            )?)?,
+            profile: body_id(args, context.resolver, "profile")?,
+        },
+        (RegistryAction::Publish, _) => RegistryCommand::Publish {
+            candidate: context.resolver.id(required(
+                args.id.as_ref().or(args.target.as_ref()),
+                name,
+                "candidate",
+            )?)?,
+            channel: body_text(args, "channel").map(ToOwned::to_owned),
+        },
+        (RegistryAction::Release, "list") => RegistryCommand::ListReleases {
+            asset: body_text(args, "asset").map(ToOwned::to_owned),
+        },
+        (RegistryAction::Release, "get") => RegistryCommand::GetRelease {
+            key: required(args.target.as_ref(), name, "target")?.to_owned(),
+        },
+        (RegistryAction::Release, "terms") | (RegistryAction::Terms, _) => {
+            RegistryCommand::ReleaseTerms {
+                release: required(args.target.as_ref(), name, "target")?.to_owned(),
+                query: args
+                    .query
+                    .clone()
+                    .or_else(|| body_text(args, "query").map(ToOwned::to_owned)),
+                limit: context.limit(args),
+                offset: context.offset(args),
+            }
+        }
+        (RegistryAction::Release, "term") => RegistryCommand::GetTerm {
+            release: required(args.target.as_ref(), name, "target")?.to_owned(),
+            term: required(args.id.as_ref(), name, "id")?.to_owned(),
+        },
+        (RegistryAction::Release, "imports") | (RegistryAction::Imports, _) => {
+            RegistryCommand::ReleaseImports {
+                release: required(args.target.as_ref(), name, "target")?.to_owned(),
+            }
+        }
+        (RegistryAction::Release, "statistics") => RegistryCommand::ReleaseStatistics {
+            release: required(args.target.as_ref(), name, "target")?.to_owned(),
+        },
+        (RegistryAction::Release, "diff") | (RegistryAction::Diff, _) => RegistryCommand::Diff {
+            left: required(args.target.as_ref(), name, "target")?.to_owned(),
+            right: required(args.id.as_ref(), name, "id")?.to_owned(),
+        },
+        (RegistryAction::Release, "reports") | (RegistryAction::Reports, _) => {
+            RegistryCommand::ListReports {
+                release: required(args.target.as_ref(), name, "target")?.to_owned(),
+            }
+        }
+        (RegistryAction::Release, "archive") => RegistryCommand::ArchiveRelease {
+            key: required(args.target.as_ref(), name, "target")?.to_owned(),
+            successor: body_text(args, "successor")
+                .or(args.id.as_deref())
+                .map(ToOwned::to_owned),
+        },
+        (RegistryAction::Profile, "list") => RegistryCommand::ListProfiles,
+        (RegistryAction::Profile, "create") => RegistryCommand::CreateProfile {
+            id: context
+                .resolver
+                .id(required(args.target.as_ref(), name, "target")?)?,
+            title: title(args, "profile create")?,
+            description: body_text(args, "description").map(ToOwned::to_owned),
+        },
+        (action, operation) => {
+            return Err(Error::validation(format!(
+                "unsupported registry operation {operation:?} for action {}",
+                action.as_str()
+            )))
+        }
+    };
+    Ok(Command::Registry(command))
+}
+
+/// Translates a `project` tool request.
+///
+/// # Errors
+///
+/// Returns [`Error::Validation`] for missing or malformed fields.
+pub fn project_command(
+    action: ProjectAction,
+    args: &CommonArgs,
+    context: &DispatchContext<'_>,
+) -> Result<Command> {
+    let name = action.as_str();
+    let operation = args.operation.as_deref().unwrap_or(match action {
+        ProjectAction::Project
+        | ProjectAction::Goal
+        | ProjectAction::Requirement
+        | ProjectAction::Work
+        | ProjectAction::Deliverable => "list",
+        ProjectAction::Assign => "assign",
+        ProjectAction::Transition => "transition",
+        ProjectAction::Accept => "accept",
+        ProjectAction::Snapshot => "snapshot",
+        ProjectAction::Overview => "overview",
+        ProjectAction::Timeline => "timeline",
+    });
+    let project = || -> Result<Id> {
+        context.resolver.id(required(
+            args.target.as_ref().or(args.id.as_ref()),
+            name,
+            "project",
+        )?)
+    };
+    let command = match (action, operation) {
+        (ProjectAction::Project, "list") => ProjectCommand::List,
+        (ProjectAction::Project, "get") => ProjectCommand::Get {
+            project: project()?,
+        },
+        (ProjectAction::Project, "create") => {
+            let request: NewProject = if let Some(body) = &args.body {
+                parse_body(body.clone())?
+            } else {
+                NewProject {
+                    title: title(args, "project create")?,
+                    description: body_text(args, "description").map(ToOwned::to_owned),
+                    owner: body_text(args, "owner").map(ToOwned::to_owned),
+                }
+            };
+            ProjectCommand::Create(request)
+        }
+        (ProjectAction::Project, "update") => ProjectCommand::Update {
+            project: project()?,
+            title: body_text(args, "title")
+                .or(args.label.as_deref())
+                .map(ToOwned::to_owned),
+            description: body_text(args, "description").map(ToOwned::to_owned),
+            owner: body_text(args, "owner").map(ToOwned::to_owned),
+        },
+        (ProjectAction::Goal, "list") => ProjectCommand::ListGoals {
+            project: project()?,
+        },
+        (ProjectAction::Goal, "add") => ProjectCommand::AddGoal {
+            project: project()?,
+            title: title(args, "goal add")?,
+            description: body_text(args, "description").map(ToOwned::to_owned),
+        },
+        (ProjectAction::Requirement, "list") => ProjectCommand::ListRequirements {
+            project: project()?,
+        },
+        (ProjectAction::Requirement, "add") => ProjectCommand::AddRequirement {
+            project: project()?,
+            title: title(args, "requirement add")?,
+            description: body_text(args, "description").map(ToOwned::to_owned),
+            kind: body_text(args, "kind")
+                .or(args.kind.as_deref())
+                .map(ToOwned::to_owned),
+        },
+        (ProjectAction::Work, "list") => ProjectCommand::ListWork {
+            project: project()?,
+        },
+        (ProjectAction::Work, "add") => {
+            let kind = body_text(args, "kind")
+                .or(args.kind.as_deref())
+                .unwrap_or("task");
+            ProjectCommand::AddWork {
+                project: project()?,
+                parent: body_id(args, context.resolver, "parent")?,
+                kind: WorkKind::parse(kind)
+                    .ok_or_else(|| Error::validation(format!("unknown work kind {kind:?}")))?,
+                title: title(args, "work add")?,
+                description: body_text(args, "description").map(ToOwned::to_owned),
+                assignee: body_text(args, "assignee").map(ToOwned::to_owned),
+                due: body_value(args, "due")
+                    .cloned()
+                    .map(serde_json::from_value)
+                    .transpose()
+                    .map_err(|error| Error::invalid(error.to_string()))?,
+            }
+        }
+        (ProjectAction::Assign, _) => ProjectCommand::Assign {
+            work: context
+                .resolver
+                .id(required(args.target.as_ref(), name, "target")?)?,
+            assignee: required_text(
+                body_text(args, "assignee").or(args.label.as_deref()),
+                name,
+                "assignee",
+            )?
+            .to_owned(),
+        },
+        (ProjectAction::Transition, _) => {
+            let event = body_text(args, "event")
+                .or(args.kind.as_deref())
+                .unwrap_or("start");
+            ProjectCommand::Transition {
+                work: context
+                    .resolver
+                    .id(required(args.target.as_ref(), name, "target")?)?,
+                event: TaskEvent::parse(event)
+                    .ok_or_else(|| Error::validation(format!("unknown task event {event:?}")))?,
+            }
+        }
+        (ProjectAction::Deliverable, "list") => ProjectCommand::ListDeliverables {
+            project: project()?,
+        },
+        (ProjectAction::Deliverable, "add") => ProjectCommand::AddDeliverable {
+            project: project()?,
+            title: title(args, "deliverable add")?,
+            kinds: args.members.clone(),
+            asset: body_id(args, context.resolver, "asset")?,
+            release: body_id(args, context.resolver, "release")?,
+            acceptance_criteria: args.properties.to_vec(),
+        },
+        (ProjectAction::Deliverable, "link") => ProjectCommand::LinkDeliverable {
+            deliverable: context.resolver.id(required(
+                args.id.as_ref().or(args.target.as_ref()),
+                name,
+                "deliverable",
+            )?)?,
+            release: required_text(
+                body_text(args, "release").or(args.ontology.as_deref()),
+                name,
+                "release",
+            )?
+            .to_owned(),
+        },
+        (ProjectAction::Accept, _) => ProjectCommand::Accept {
+            deliverable: context.resolver.id(required(
+                args.id.as_ref().or(args.target.as_ref()),
+                name,
+                "deliverable",
+            )?)?,
+            evidence: body_text(args, "evidence")
+                .or(args.source.as_deref())
+                .map(ToOwned::to_owned),
+            criterion: body_text(args, "criterion")
+                .or(args.label.as_deref())
+                .map(ToOwned::to_owned),
+        },
+        (ProjectAction::Snapshot, _) => ProjectCommand::Snapshot {
+            project: project()?,
+        },
+        (ProjectAction::Overview, _) => ProjectCommand::Overview {
+            project: project()?,
+        },
+        (ProjectAction::Timeline, _) => ProjectCommand::Timeline {
+            project: project()?,
+        },
+        (action, operation) => {
+            return Err(Error::validation(format!(
+                "unsupported project operation {operation:?} for action {}",
+                action.as_str()
+            )))
+        }
+    };
+    Ok(Command::Project(command))
 }
 
 #[cfg(test)]

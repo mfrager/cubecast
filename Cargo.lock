@@ -1394,6 +1394,7 @@ dependencies = [
  "ontology-core",
  "ontology-graph",
  "ontology-rdf",
+ "ontology-registry",
  "serde",
  "serde_json",
  "tokio",
@@ -1414,7 +1415,9 @@ dependencies = [
  "ontology-inference",
  "ontology-mineru",
  "ontology-owl",
+ "ontology-project",
  "ontology-rdf",
+ "ontology-registry",
  "ontology-skos",
  "serde",
  "serde_json",
@@ -1436,6 +1439,7 @@ name = "ontology-cli"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "clap",
  "ontology-api",
  "ontology-application",
@@ -1546,7 +1550,9 @@ dependencies = [
  "ontology-import",
  "ontology-inference",
  "ontology-owl",
+ "ontology-project",
  "ontology-rdf",
+ "ontology-registry",
  "ontology-skos",
  "serde_json",
  "tempfile",
@@ -1599,6 +1605,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ontology-project"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "ontology-core",
+ "serde",
+ "tempfile",
+ "ulid",
+]
+
+[[package]]
 name = "ontology-rdf"
 version = "0.1.0"
 dependencies = [
@@ -1609,6 +1627,24 @@ dependencies = [
  "spargebra",
  "tempfile",
  "tracing",
+]
+
+[[package]]
+name = "ontology-registry"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "ontology-core",
+ "ontology-rdf",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "ulid",
 ]
 
 [[package]]

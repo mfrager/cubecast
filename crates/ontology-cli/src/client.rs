@@ -76,6 +76,46 @@ impl Connection {
         self.print(&value)
     }
 
+    /// Downloads one distribution artifact from the registry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for transport failures, non-success responses, or I/O.
+    pub async fn download(
+        &self,
+        key: &str,
+        format: &str,
+        output: &std::path::Path,
+    ) -> CliResult<()> {
+        if self.dry_run {
+            println!(
+                "GET {}/api/v1/registry/download/{key}/{format}",
+                self.server.trim_end_matches('/')
+            );
+            return Ok(());
+        }
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(300))
+            .build()?;
+        let url = format!(
+            "{}/api/v1/registry/download/{key}/{format}",
+            self.server.trim_end_matches('/')
+        );
+        let mut request = client.get(url);
+        if let Some(api_key) = &self.api_key {
+            request = request.bearer_auth(api_key);
+        }
+        let response = request.send().await?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(format!("API returned {status}: {}", response.text().await?).into());
+        }
+        let bytes = response.bytes().await?;
+        std::fs::write(output, &bytes)?;
+        println!("wrote {}", output.display());
+        Ok(())
+    }
+
     /// Posts a command and returns the decoded result.
     ///
     /// # Errors

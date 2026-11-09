@@ -83,6 +83,54 @@ pub fn document() -> Value {
         ("/api/v1/mappings/classes", &["get", "post"][..]),
         ("/api/v1/mappings/properties", &["get", "post"][..]),
         ("/api/v1/mappings/validate", &["post"][..]),
+        ("/api/v1/registry", &["post"][..]),
+        ("/api/v1/registry/catalogs", &["get", "post"][..]),
+        ("/api/v1/registry/catalogs/{id}", &["get"][..]),
+        (
+            "/api/v1/registry/catalogs/{id}/assets",
+            &["get", "post"][..],
+        ),
+        ("/api/v1/registry/assets/{key}", &["get"][..]),
+        ("/api/v1/registry/assets/{key}/releases", &["get"][..]),
+        ("/api/v1/registry/ingestions", &["get", "post"][..]),
+        ("/api/v1/registry/ingestions/{id}", &["get"][..]),
+        ("/api/v1/registry/ingestions/{id}/analyze", &["post"][..]),
+        ("/api/v1/registry/ingestions/{id}/validate", &["post"][..]),
+        (
+            "/api/v1/registry/ingestions/{id}/release-candidate",
+            &["post"][..],
+        ),
+        ("/api/v1/registry/candidates/{id}/publish", &["post"][..]),
+        ("/api/v1/registry/releases/{key}", &["get"][..]),
+        ("/api/v1/registry/releases/{key}/archive", &["post"][..]),
+        ("/api/v1/registry/releases/{key}/terms", &["get"][..]),
+        ("/api/v1/registry/releases/{key}/terms/{term}", &["get"][..]),
+        ("/api/v1/registry/releases/{key}/imports", &["get"][..]),
+        ("/api/v1/registry/releases/{key}/statistics", &["get"][..]),
+        ("/api/v1/registry/releases/{key}/diff/{other}", &["get"][..]),
+        ("/api/v1/registry/releases/{key}/reports", &["get"][..]),
+        ("/api/v1/registry/download/{key}/{format}", &["get"][..]),
+        ("/api/v1/registry/profiles", &["get", "post"][..]),
+        ("/api/v1/registry/search", &["get"][..]),
+        ("/api/v1/projects", &["get", "post"][..]),
+        ("/api/v1/projects/{project}", &["get"][..]),
+        ("/api/v1/projects/{project}/goals", &["get", "post"][..]),
+        (
+            "/api/v1/projects/{project}/requirements",
+            &["get", "post"][..],
+        ),
+        ("/api/v1/projects/{project}/work", &["get", "post"][..]),
+        ("/api/v1/work/{id}/transition", &["post"][..]),
+        ("/api/v1/work/{id}/assignments", &["post"][..]),
+        ("/api/v1/projects/{project}/dependencies", &["get"][..]),
+        (
+            "/api/v1/projects/{project}/deliverables",
+            &["get", "post"][..],
+        ),
+        ("/api/v1/deliverables/{id}/accept", &["post"][..]),
+        ("/api/v1/projects/{project}/snapshots", &["post"][..]),
+        ("/api/v1/projects/{project}/overview", &["get"][..]),
+        ("/api/v1/projects/{project}/timeline", &["get"][..]),
     ];
 
     let mut map = serde_json::Map::new();
@@ -119,7 +167,7 @@ pub fn document() -> Value {
         "info": {
             "title": "Ontology Management System API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "RDF storage, OWL/SKOS management, classification, embeddings, inference, and background jobs."
+            "description": "RDF storage, OWL/SKOS management, semantic registry, project management, classification, embeddings, inference, and background jobs."
         },
         "servers": [{"url": "/"}],
         "paths": Value::Object(map),
@@ -147,4 +195,62 @@ pub fn document() -> Value {
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn documents_registry_and_project_routes() {
+        let document = document();
+        let paths = document["paths"].as_object().expect("paths object");
+        let expected = [
+            "/api/v1/registry",
+            "/api/v1/registry/catalogs",
+            "/api/v1/registry/catalogs/{id}",
+            "/api/v1/registry/catalogs/{id}/assets",
+            "/api/v1/registry/assets/{key}",
+            "/api/v1/registry/assets/{key}/releases",
+            "/api/v1/registry/ingestions",
+            "/api/v1/registry/ingestions/{id}",
+            "/api/v1/registry/ingestions/{id}/analyze",
+            "/api/v1/registry/ingestions/{id}/validate",
+            "/api/v1/registry/ingestions/{id}/release-candidate",
+            "/api/v1/registry/candidates/{id}/publish",
+            "/api/v1/registry/releases/{key}",
+            "/api/v1/registry/releases/{key}/archive",
+            "/api/v1/registry/releases/{key}/terms",
+            "/api/v1/registry/releases/{key}/terms/{term}",
+            "/api/v1/registry/releases/{key}/imports",
+            "/api/v1/registry/releases/{key}/statistics",
+            "/api/v1/registry/releases/{key}/diff/{other}",
+            "/api/v1/registry/releases/{key}/reports",
+            "/api/v1/registry/download/{key}/{format}",
+            "/api/v1/registry/profiles",
+            "/api/v1/registry/search",
+            "/api/v1/projects",
+            "/api/v1/projects/{project}",
+            "/api/v1/projects/{project}/goals",
+            "/api/v1/projects/{project}/requirements",
+            "/api/v1/projects/{project}/work",
+            "/api/v1/work/{id}/transition",
+            "/api/v1/work/{id}/assignments",
+            "/api/v1/projects/{project}/dependencies",
+            "/api/v1/projects/{project}/deliverables",
+            "/api/v1/deliverables/{id}/accept",
+            "/api/v1/projects/{project}/snapshots",
+            "/api/v1/projects/{project}/overview",
+            "/api/v1/projects/{project}/timeline",
+        ];
+        for path in expected {
+            assert!(paths.contains_key(path), "missing OpenAPI path {path}");
+        }
+        assert_eq!(paths.len(), 107, "OpenAPI path count changed");
+        let operations: usize = paths
+            .values()
+            .map(|value| value.as_object().expect("operations").len())
+            .sum();
+        assert_eq!(operations, 145, "OpenAPI operation count changed");
+    }
 }

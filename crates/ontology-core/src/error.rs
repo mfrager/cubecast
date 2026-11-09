@@ -179,6 +179,33 @@ pub enum Error {
         /// Underlying failure.
         reason: String,
     },
+
+    /// A registry operation failed at a named stage.
+    #[error("registry {stage} failed: {detail}")]
+    Registry {
+        /// Stable stage name, e.g. `"ingest"` or `"publish"`.
+        stage: &'static str,
+        /// Explanation.
+        detail: String,
+    },
+
+    /// A project operation failed at a named stage.
+    #[error("project {stage} failed: {detail}")]
+    Project {
+        /// Stable stage name.
+        stage: &'static str,
+        /// Explanation.
+        detail: String,
+    },
+
+    /// A configured size limit was exceeded.
+    #[error("limit {limit} exceeded by {actual}")]
+    Limit {
+        /// Configured maximum.
+        limit: u64,
+        /// Observed size.
+        actual: u64,
+    },
 }
 
 impl Error {

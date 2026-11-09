@@ -46,6 +46,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(
             ApplicationService::new(backend.rdf_store())
                 .with_namespaces(namespaces)
+                .with_semantic_layer(&config)?
                 .with_configured_documents(&config)?,
         )
     };

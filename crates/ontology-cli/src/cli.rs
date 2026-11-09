@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 use ontology_core::command::{
-    Command, DocumentCommand, ExternalCommand, JobCommand, OntologyCommand, RdfCommand,
-    SemanticCommand, TaxonomyCommand,
+    Command, DocumentCommand, ExternalCommand, JobCommand, OntologyCommand, ProjectCommand,
+    RdfCommand, RegistryCommand, SemanticCommand, TaxonomyCommand,
 };
 use ontology_core::document::{ExtractionMode, ExtractionRequest, TextFormat};
 use ontology_core::external::{ClassMapping, ImportRequest, MappingQuery, PropertyMapping};
@@ -18,6 +18,8 @@ use ontology_core::model::{
 use ontology_core::owl::{
     ClassQuery, GraphScope, Ontology, OwlClass, OwlProperty, PropertyKind, PropertyQuery,
 };
+use ontology_core::project::{TaskEvent, WorkKind};
+use ontology_core::registry::IngestRequest;
 use ontology_core::semantic::{
     ApplyPolicy, ClassificationOptions, ClassificationStrategy, InferenceOptions,
 };
@@ -142,6 +144,18 @@ pub enum CommandArgs {
         /// Operation.
         #[command(subcommand)]
         command: DocumentArgs,
+    },
+    /// Semantic registry: catalogs, assets, ingestion, releases, and search.
+    Registry {
+        /// Operation.
+        #[command(subcommand)]
+        command: RegistryArgs,
+    },
+    /// Project management and deliverable acceptance.
+    Project {
+        /// Operation.
+        #[command(subcommand)]
+        command: ProjectArgs,
     },
     /// Bulk RDF import.
     Import(ImportArgs),
@@ -1102,12 +1116,393 @@ pub enum Action {
         /// Poll interval in seconds.
         interval_secs: u64,
     },
+    /// Download a registry distribution artifact.
+    Download {
+        /// Release key.
+        key: String,
+        /// RDF syntax name.
+        format: String,
+        /// Destination path.
+        output: PathBuf,
+    },
     /// Start the HTTP server.
     Server(ServerArgs),
     /// Print the resolved configuration.
     Config,
     /// Start the interactive shell.
     Shell,
+}
+
+/// Registry operations.
+#[derive(Debug, Subcommand)]
+pub enum RegistryArgs {
+    /// Catalog operations.
+    Catalog {
+        /// Operation.
+        #[command(subcommand)]
+        command: RegistryCatalogArgs,
+    },
+    /// Asset operations.
+    Asset {
+        /// Operation.
+        #[command(subcommand)]
+        command: RegistryAssetArgs,
+    },
+    /// Ingest a local file or URL.
+    Ingest(RegistryIngestArgs),
+    /// Candidate operations.
+    Candidate {
+        /// Operation.
+        #[command(subcommand)]
+        command: RegistryCandidateArgs,
+    },
+    /// Release operations.
+    Release {
+        /// Operation.
+        #[command(subcommand)]
+        command: RegistryReleaseArgs,
+    },
+    /// Profile operations.
+    Profile {
+        /// Operation.
+        #[command(subcommand)]
+        command: RegistryProfileArgs,
+    },
+    /// Search catalog metadata, terms, namespaces, and dependencies.
+    Search(RegistrySearchArgs),
+    /// Download a distribution artifact.
+    Download(RegistryDownloadArgs),
+}
+
+/// Catalog operations.
+#[derive(Debug, Subcommand)]
+pub enum RegistryCatalogArgs {
+    /// List catalogs.
+    List,
+    /// Show one catalog.
+    Show {
+        /// Catalog IRI.
+        id: String,
+    },
+    /// Create a catalog.
+    Create {
+        /// Catalog title.
+        title: String,
+        /// Optional description.
+        #[arg(long)]
+        description: Option<String>,
+    },
+}
+
+/// Asset operations.
+#[derive(Debug, Subcommand)]
+pub enum RegistryAssetArgs {
+    /// List assets.
+    List {
+        /// Restrict to a catalog IRI.
+        #[arg(long)]
+        catalog: Option<String>,
+    },
+    /// Register an asset family.
+    Register {
+        /// Family IRI.
+        asset_iri: String,
+        /// Owning catalog IRI.
+        #[arg(long)]
+        catalog: Option<String>,
+        /// Display title.
+        #[arg(long)]
+        title: Option<String>,
+        /// Optional description.
+        #[arg(long)]
+        description: Option<String>,
+        /// Declared namespace.
+        #[arg(long)]
+        namespace: Option<String>,
+    },
+    /// Show an asset by key or IRI.
+    Show {
+        /// Asset key or IRI.
+        key: String,
+    },
+}
+
+/// Ingestion options.
+#[derive(Debug, Args)]
+pub struct RegistryIngestArgs {
+    /// Local path or HTTP(S) URL.
+    pub source: String,
+    /// Release version.
+    #[arg(long)]
+    pub version: Option<String>,
+    /// Explicit family IRI.
+    #[arg(long)]
+    pub asset: Option<String>,
+    /// RDF syntax name.
+    #[arg(long)]
+    pub format: Option<String>,
+    /// Optional display title.
+    #[arg(long)]
+    pub title: Option<String>,
+    /// Owning catalog IRI.
+    #[arg(long)]
+    pub catalog: Option<String>,
+    /// Inline RDF document; otherwise the local file is read for local servers.
+    #[arg(long = "data")]
+    pub data: Option<String>,
+}
+
+/// Candidate operations.
+#[derive(Debug, Subcommand)]
+pub enum RegistryCandidateArgs {
+    /// Show a candidate.
+    Show { id: String },
+    /// List candidates, optionally for an asset.
+    List {
+        #[arg(long)]
+        asset: Option<String>,
+    },
+    /// Recompute analysis.
+    Analyze { id: String },
+    /// Resolve imports (currently the same as analysis).
+    Resolve { id: String },
+    /// Validate a candidate.
+    Validate {
+        id: String,
+        #[arg(long)]
+        profile: Option<String>,
+    },
+    /// Publish a candidate.
+    Publish {
+        id: String,
+        #[arg(long)]
+        channel: Option<String>,
+    },
+}
+
+/// Release operations.
+#[derive(Debug, Subcommand)]
+pub enum RegistryReleaseArgs {
+    /// List releases, optionally for an asset.
+    List {
+        #[arg(long)]
+        asset: Option<String>,
+    },
+    /// Show one release.
+    Show { key: String },
+    /// List or search terms.
+    Terms {
+        key: String,
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+    },
+    /// Show one term.
+    Term { release: String, term: String },
+    /// List imports.
+    Imports { release: String },
+    /// Show statistics.
+    Stats { release: String },
+    /// Compare two releases.
+    Diff { left: String, right: String },
+    /// List validation reports.
+    Reports { release: String },
+    /// Archive a release.
+    Archive {
+        key: String,
+        #[arg(long)]
+        successor: Option<String>,
+    },
+}
+
+/// Profile operations.
+#[derive(Debug, Subcommand)]
+pub enum RegistryProfileArgs {
+    /// List profiles.
+    List,
+    /// Create a profile.
+    Create {
+        id: String,
+        title: String,
+        #[arg(long)]
+        description: Option<String>,
+    },
+}
+
+/// Registry search options.
+#[derive(Debug, Args)]
+pub struct RegistrySearchArgs {
+    /// Search text.
+    pub query: String,
+    /// Result kind.
+    #[arg(long)]
+    pub kind: Option<String>,
+    #[arg(long, default_value_t = 100)]
+    pub limit: usize,
+    #[arg(long, default_value_t = 0)]
+    pub offset: usize,
+}
+
+/// Distribution download options.
+#[derive(Debug, Args)]
+pub struct RegistryDownloadArgs {
+    /// Release key.
+    pub key: String,
+    /// RDF syntax name.
+    #[arg(long, default_value = "turtle")]
+    pub format: String,
+    /// Output path.
+    #[arg(long)]
+    pub output: PathBuf,
+}
+
+/// Project operations.
+#[derive(Debug, Subcommand)]
+pub enum ProjectArgs {
+    /// Create a project from a `NewProject` JSON document.
+    Create {
+        #[command(flatten)]
+        payload: PayloadArgs,
+    },
+    /// List projects.
+    List,
+    /// Show a project.
+    Show { project: String },
+    /// Update project metadata.
+    Update {
+        project: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long)]
+        owner: Option<String>,
+    },
+    /// Goal operations.
+    Goal {
+        #[command(subcommand)]
+        command: ProjectGoalArgs,
+    },
+    /// Requirement operations.
+    Requirement {
+        #[command(subcommand)]
+        command: ProjectRequirementArgs,
+    },
+    /// Work operations.
+    Work {
+        #[command(subcommand)]
+        command: ProjectWorkArgs,
+    },
+    /// Deliverable operations.
+    Deliverable {
+        #[command(subcommand)]
+        command: ProjectDeliverableArgs,
+    },
+    /// Create a snapshot.
+    Snapshot { project: String },
+    /// Show the overview.
+    Overview { project: String },
+    /// Show the timeline.
+    Timeline { project: String },
+    /// Show dependency edges.
+    Dependencies { project: String },
+}
+
+/// Goal operations.
+#[derive(Debug, Subcommand)]
+pub enum ProjectGoalArgs {
+    /// Add a goal.
+    Add {
+        project: String,
+        title: String,
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// List goals.
+    List { project: String },
+}
+
+/// Requirement operations.
+#[derive(Debug, Subcommand)]
+pub enum ProjectRequirementArgs {
+    /// Add a requirement.
+    Add {
+        project: String,
+        title: String,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long)]
+        kind: Option<String>,
+    },
+    /// List requirements.
+    List { project: String },
+}
+
+/// Work operations.
+#[derive(Debug, Subcommand)]
+pub enum ProjectWorkArgs {
+    /// Add a work item.
+    Add {
+        project: String,
+        title: String,
+        /// `task`, `work_package`, or `milestone`.
+        #[arg(long, default_value = "task")]
+        kind: String,
+        #[arg(long)]
+        parent: Option<String>,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long)]
+        assignee: Option<String>,
+        #[arg(long)]
+        due: Option<chrono::DateTime<chrono::Utc>>,
+    },
+    /// List work items.
+    List { project: String },
+    /// Transition a work item.
+    Transition {
+        work: String,
+        /// `start`, `block`, `unblock`, `complete`, or `cancel`.
+        event: String,
+    },
+    /// Assign a work item.
+    Assign { work: String, assignee: String },
+}
+
+/// Deliverable operations.
+#[derive(Debug, Subcommand)]
+pub enum ProjectDeliverableArgs {
+    /// Add a deliverable.
+    Add {
+        project: String,
+        title: String,
+        #[arg(long = "kind")]
+        kinds: Vec<String>,
+        #[arg(long)]
+        asset: Option<String>,
+        #[arg(long)]
+        release: Option<String>,
+        #[arg(long = "criterion")]
+        acceptance_criteria: Vec<String>,
+    },
+    /// List deliverables.
+    List { project: String },
+    /// Link to a published release.
+    Link {
+        deliverable: String,
+        release: String,
+    },
+    /// Accept against registry evidence.
+    Accept {
+        deliverable: String,
+        #[arg(long)]
+        evidence: Option<String>,
+        #[arg(long)]
+        criterion: Option<String>,
+    },
 }
 
 /// Translates parsed arguments into an action.
@@ -1133,6 +1528,8 @@ pub fn action(args: CommandArgs) -> CliResult<Action> {
         CommandArgs::External { command } => Invocation::new(external_command(command)?),
         CommandArgs::Inference { command } => Invocation::new(inference_command(command)?),
         CommandArgs::Document { command } => Invocation::new(document_command(command)?),
+        CommandArgs::Registry { command } => return registry_action(command),
+        CommandArgs::Project { command } => Invocation::new(project_command(command)?),
         CommandArgs::Import(args) => Invocation::new(import_command(args)?),
         CommandArgs::Export(args) => {
             let output = args.output.clone();
@@ -1141,6 +1538,267 @@ pub fn action(args: CommandArgs) -> CliResult<Action> {
         CommandArgs::Job { command } => return job_action(command),
     };
     Ok(Action::Command(invocation))
+}
+
+fn registry_action(command: RegistryArgs) -> CliResult<Action> {
+    match command {
+        RegistryArgs::Download(args) => Ok(Action::Download {
+            key: args.key,
+            format: args.format,
+            output: args.output,
+        }),
+        other => Ok(Action::Command(Invocation::new(registry_command(other)?))),
+    }
+}
+
+fn registry_command(command: RegistryArgs) -> CliResult<Command> {
+    let command = match command {
+        RegistryArgs::Catalog { command } => match command {
+            RegistryCatalogArgs::List => RegistryCommand::ListCatalogs,
+            RegistryCatalogArgs::Show { id } => RegistryCommand::GetCatalog { id: parse_id(&id)? },
+            RegistryCatalogArgs::Create { title, description } => {
+                RegistryCommand::CreateCatalog { title, description }
+            }
+        },
+        RegistryArgs::Asset { command } => match command {
+            RegistryAssetArgs::List { catalog } => RegistryCommand::ListAssets {
+                catalog: catalog.as_deref().map(parse_id).transpose()?,
+            },
+            RegistryAssetArgs::Register {
+                asset_iri,
+                catalog,
+                title,
+                description,
+                namespace,
+            } => RegistryCommand::RegisterAsset {
+                catalog: catalog.as_deref().map(parse_id).transpose()?,
+                asset_iri: parse_id(&asset_iri)?,
+                title,
+                description,
+                namespace,
+            },
+            RegistryAssetArgs::Show { key } => RegistryCommand::GetAsset { key },
+        },
+        RegistryArgs::Ingest(args) => {
+            let data = match args.data {
+                Some(data) => Some(data),
+                None if std::path::Path::new(&args.source).is_file() => {
+                    Some(std::fs::read_to_string(&args.source)?)
+                }
+                None => None,
+            };
+            RegistryCommand::Ingest(IngestRequest {
+                catalog: args.catalog.as_deref().map(parse_id).transpose()?,
+                source: args.source,
+                data,
+                asset_iri: args.asset.as_deref().map(parse_id).transpose()?,
+                version: args.version,
+                format: args.format,
+                title: args.title,
+            })
+        }
+        RegistryArgs::Candidate { command } => match command {
+            RegistryCandidateArgs::Show { id } => {
+                RegistryCommand::GetCandidate { id: parse_id(&id)? }
+            }
+            RegistryCandidateArgs::List { asset } => RegistryCommand::ListCandidates {
+                asset: asset.as_deref().map(parse_id).transpose()?,
+            },
+            RegistryCandidateArgs::Analyze { id } => RegistryCommand::Analyze {
+                candidate: parse_id(&id)?,
+            },
+            RegistryCandidateArgs::Resolve { id } => RegistryCommand::Analyze {
+                candidate: parse_id(&id)?,
+            },
+            RegistryCandidateArgs::Validate { id, profile } => RegistryCommand::Validate {
+                candidate: parse_id(&id)?,
+                profile: profile.as_deref().map(parse_id).transpose()?,
+            },
+            RegistryCandidateArgs::Publish { id, channel } => RegistryCommand::Publish {
+                candidate: parse_id(&id)?,
+                channel,
+            },
+        },
+        RegistryArgs::Release { command } => match command {
+            RegistryReleaseArgs::List { asset } => RegistryCommand::ListReleases { asset },
+            RegistryReleaseArgs::Show { key } => RegistryCommand::GetRelease { key },
+            RegistryReleaseArgs::Terms {
+                key,
+                query,
+                limit,
+                offset,
+            } => RegistryCommand::ReleaseTerms {
+                release: key,
+                query,
+                limit,
+                offset,
+            },
+            RegistryReleaseArgs::Term { release, term } => {
+                RegistryCommand::GetTerm { release, term }
+            }
+            RegistryReleaseArgs::Imports { release } => RegistryCommand::ReleaseImports { release },
+            RegistryReleaseArgs::Stats { release } => {
+                RegistryCommand::ReleaseStatistics { release }
+            }
+            RegistryReleaseArgs::Diff { left, right } => RegistryCommand::Diff { left, right },
+            RegistryReleaseArgs::Reports { release } => RegistryCommand::ListReports { release },
+            RegistryReleaseArgs::Archive { key, successor } => {
+                RegistryCommand::ArchiveRelease { key, successor }
+            }
+        },
+        RegistryArgs::Profile { command } => match command {
+            RegistryProfileArgs::List => RegistryCommand::ListProfiles,
+            RegistryProfileArgs::Create {
+                id,
+                title,
+                description,
+            } => RegistryCommand::CreateProfile {
+                id: parse_id(&id)?,
+                title,
+                description,
+            },
+        },
+        RegistryArgs::Search(args) => RegistryCommand::Search {
+            query: args.query,
+            kind: args.kind,
+            limit: args.limit,
+            offset: args.offset,
+        },
+        RegistryArgs::Download(_) => return Err("download is handled by the HTTP client".into()),
+    };
+    Ok(Command::Registry(command))
+}
+
+fn project_command(command: ProjectArgs) -> CliResult<Command> {
+    let command = match command {
+        ProjectArgs::Create { payload } => ProjectCommand::Create(payload.parse()?),
+        ProjectArgs::List => ProjectCommand::List,
+        ProjectArgs::Show { project } => ProjectCommand::Get {
+            project: parse_id(&project)?,
+        },
+        ProjectArgs::Update {
+            project,
+            title,
+            description,
+            owner,
+        } => ProjectCommand::Update {
+            project: parse_id(&project)?,
+            title,
+            description,
+            owner,
+        },
+        ProjectArgs::Goal { command } => match command {
+            ProjectGoalArgs::Add {
+                project,
+                title,
+                description,
+            } => ProjectCommand::AddGoal {
+                project: parse_id(&project)?,
+                title,
+                description,
+            },
+            ProjectGoalArgs::List { project } => ProjectCommand::ListGoals {
+                project: parse_id(&project)?,
+            },
+        },
+        ProjectArgs::Requirement { command } => match command {
+            ProjectRequirementArgs::Add {
+                project,
+                title,
+                description,
+                kind,
+            } => ProjectCommand::AddRequirement {
+                project: parse_id(&project)?,
+                title,
+                description,
+                kind,
+            },
+            ProjectRequirementArgs::List { project } => ProjectCommand::ListRequirements {
+                project: parse_id(&project)?,
+            },
+        },
+        ProjectArgs::Work { command } => match command {
+            ProjectWorkArgs::Add {
+                project,
+                title,
+                kind,
+                parent,
+                description,
+                assignee,
+                due,
+            } => ProjectCommand::AddWork {
+                project: parse_id(&project)?,
+                parent: parent.as_deref().map(parse_id).transpose()?,
+                kind: WorkKind::parse(&kind)
+                    .ok_or_else(|| format!("unknown work kind `{kind}`"))?,
+                title,
+                description,
+                assignee,
+                due,
+            },
+            ProjectWorkArgs::List { project } => ProjectCommand::ListWork {
+                project: parse_id(&project)?,
+            },
+            ProjectWorkArgs::Transition { work, event } => ProjectCommand::Transition {
+                work: parse_id(&work)?,
+                event: TaskEvent::parse(&event)
+                    .ok_or_else(|| format!("unknown task event `{event}`"))?,
+            },
+            ProjectWorkArgs::Assign { work, assignee } => ProjectCommand::Assign {
+                work: parse_id(&work)?,
+                assignee,
+            },
+        },
+        ProjectArgs::Deliverable { command } => match command {
+            ProjectDeliverableArgs::Add {
+                project,
+                title,
+                kinds,
+                asset,
+                release,
+                acceptance_criteria,
+            } => ProjectCommand::AddDeliverable {
+                project: parse_id(&project)?,
+                title,
+                kinds,
+                asset: asset.as_deref().map(parse_id).transpose()?,
+                release: release.as_deref().map(parse_id).transpose()?,
+                acceptance_criteria,
+            },
+            ProjectDeliverableArgs::List { project } => ProjectCommand::ListDeliverables {
+                project: parse_id(&project)?,
+            },
+            ProjectDeliverableArgs::Link {
+                deliverable,
+                release,
+            } => ProjectCommand::LinkDeliverable {
+                deliverable: parse_id(&deliverable)?,
+                release,
+            },
+            ProjectDeliverableArgs::Accept {
+                deliverable,
+                evidence,
+                criterion,
+            } => ProjectCommand::Accept {
+                deliverable: parse_id(&deliverable)?,
+                evidence,
+                criterion,
+            },
+        },
+        ProjectArgs::Snapshot { project } => ProjectCommand::Snapshot {
+            project: parse_id(&project)?,
+        },
+        ProjectArgs::Overview { project } => ProjectCommand::Overview {
+            project: parse_id(&project)?,
+        },
+        ProjectArgs::Timeline { project } => ProjectCommand::Timeline {
+            project: parse_id(&project)?,
+        },
+        ProjectArgs::Dependencies { project } => ProjectCommand::Dependencies {
+            project: parse_id(&project)?,
+        },
+    };
+    Ok(Command::Project(command))
 }
 
 fn rdf_action(command: RdfArgs) -> CliResult<Invocation> {

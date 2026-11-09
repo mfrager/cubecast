@@ -68,6 +68,7 @@ pub async fn serve(options: ServeOptions) -> Result<()> {
     let service = Arc::new(
         ApplicationService::new(backend.rdf_store())
             .with_namespaces(namespaces)
+            .with_semantic_layer(&options.config)?
             .with_configured_documents(&options.config)?,
     );
     let state =

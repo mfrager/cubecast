@@ -1,0 +1,25 @@
+[package]
+name = "ontology-registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Semantic registry: catalogs, immutable releases, analysis, validation, and publication"
+
+[dependencies]
+ontology-core.workspace = true
+ontology-rdf.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+ulid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

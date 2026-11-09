@@ -10,6 +10,7 @@ ontology-core.workspace = true
 ontology-application.workspace = true
 ontology-rdf.workspace = true
 ontology-graph.workspace = true
+ontology-registry.workspace = true
 axum.workspace = true
 tokio.workspace = true
 serde.workspace = true

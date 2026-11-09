@@ -17,6 +17,8 @@ use crate::model::{
 use crate::owl::{
     ClassQuery, GraphScope, Ontology, OwlClass, OwlProperty, PropertyQuery, ValidationReport,
 };
+use crate::project::{NewProject, ProjectResult, TaskEvent, WorkKind};
+use crate::registry::{IngestRequest, RegistryResult};
 use crate::semantic::{
     ApplyPolicy, Classification, ClassificationOptions, EmbeddingRecord, InferenceOptions,
     InferencePreview, InferenceReport, VectorFilter, VectorMatch,
@@ -43,6 +45,10 @@ pub enum Command {
     Job(JobCommand),
     /// Document extraction through MinerU.
     Document(DocumentCommand),
+    /// Semantic registry operations.
+    Registry(RegistryCommand),
+    /// Project-management operations.
+    Project(ProjectCommand),
 }
 
 /// Document extraction operations.
@@ -55,6 +61,345 @@ pub enum DocumentCommand {
     Get {
         /// `urn:sha256:<hex>` document identifier.
         id: String,
+    },
+}
+
+fn default_registry_page() -> usize {
+    crate::registry::DEFAULT_PAGE_SIZE
+}
+
+/// Semantic registry operations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "camelCase")]
+pub enum RegistryCommand {
+    /// Creates a catalog.
+    CreateCatalog {
+        /// Catalog title.
+        title: String,
+        /// Optional description.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+    },
+    /// Retrieves a catalog.
+    GetCatalog {
+        /// Catalog IRI.
+        id: Id,
+    },
+    /// Lists catalogs.
+    ListCatalogs,
+    /// Registers an asset family.
+    RegisterAsset {
+        /// Owning catalog; defaults to the default catalog.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        catalog: Option<Id>,
+        /// Ontology or vocabulary IRI.
+        asset_iri: Id,
+        /// Optional title.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        /// Optional description.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        /// Declared namespace.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        namespace: Option<String>,
+    },
+    /// Retrieves an asset by key or IRI.
+    GetAsset {
+        /// Asset key or family IRI.
+        key: String,
+    },
+    /// Lists assets.
+    ListAssets {
+        /// Restrict to a catalog.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        catalog: Option<Id>,
+    },
+    /// Ingests a source into a candidate.
+    Ingest(IngestRequest),
+    /// Retrieves a candidate.
+    GetCandidate {
+        /// Candidate IRI.
+        id: Id,
+    },
+    /// Lists candidates.
+    ListCandidates {
+        /// Restrict to an asset.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asset: Option<Id>,
+    },
+    /// Recomputes analysis for a candidate.
+    Analyze {
+        /// Candidate IRI.
+        candidate: Id,
+    },
+    /// Runs structural validation.
+    Validate {
+        /// Candidate IRI.
+        candidate: Id,
+        /// Profile to validate against.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<Id>,
+    },
+    /// Publishes a candidate.
+    Publish {
+        /// Candidate IRI.
+        candidate: Id,
+        /// Release channel; defaults to `stable`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        channel: Option<String>,
+    },
+    /// Lists releases.
+    ListReleases {
+        /// Restrict to an asset key or family IRI.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asset: Option<String>,
+    },
+    /// Retrieves a release by key or IRI.
+    GetRelease {
+        /// Release key or version IRI.
+        key: String,
+    },
+    /// Searches release terms.
+    ReleaseTerms {
+        /// Release key or version IRI.
+        release: String,
+        /// Optional text filter.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        query: Option<String>,
+        /// Maximum results.
+        #[serde(default = "default_registry_page")]
+        limit: usize,
+        /// Results to skip.
+        #[serde(default)]
+        offset: usize,
+    },
+    /// Retrieves one term by key.
+    GetTerm {
+        /// Release key or version IRI.
+        release: String,
+        /// Term key or term IRI.
+        term: String,
+    },
+    /// Lists release imports.
+    ReleaseImports {
+        /// Release key or version IRI.
+        release: String,
+    },
+    /// Returns release statistics.
+    ReleaseStatistics {
+        /// Release key or version IRI.
+        release: String,
+    },
+    /// Compares two releases.
+    Diff {
+        /// Left release key or IRI.
+        left: String,
+        /// Right release key or IRI.
+        right: String,
+    },
+    /// Searches catalogs, terms, namespaces, and dependencies.
+    Search {
+        /// Search text.
+        query: String,
+        /// Result category.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<String>,
+        /// Maximum results.
+        #[serde(default = "default_registry_page")]
+        limit: usize,
+        /// Results to skip.
+        #[serde(default)]
+        offset: usize,
+    },
+    /// Archives a release and optionally points the family at a successor.
+    ArchiveRelease {
+        /// Release key or version IRI.
+        key: String,
+        /// Successor release key.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        successor: Option<String>,
+    },
+    /// Lists validation reports for a release.
+    ListReports {
+        /// Release key or version IRI.
+        release: String,
+    },
+    /// Creates a profile.
+    CreateProfile {
+        /// Profile IRI.
+        id: Id,
+        /// Title.
+        title: String,
+        /// Optional description.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+    },
+    /// Lists profiles.
+    ListProfiles,
+}
+
+/// Project-management operations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "camelCase")]
+pub enum ProjectCommand {
+    /// Creates a project.
+    Create(NewProject),
+    /// Retrieves a project.
+    Get {
+        /// Project IRI.
+        project: Id,
+    },
+    /// Lists projects.
+    List,
+    /// Updates project metadata.
+    Update {
+        /// Project IRI.
+        project: Id,
+        /// Optional replacement title.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        /// Optional replacement description.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        /// Optional owner.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        owner: Option<String>,
+    },
+    /// Adds a goal.
+    AddGoal {
+        /// Project IRI.
+        project: Id,
+        /// Goal title.
+        title: String,
+        /// Optional description.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+    },
+    /// Lists goals.
+    ListGoals {
+        /// Project IRI.
+        project: Id,
+    },
+    /// Adds a requirement.
+    AddRequirement {
+        /// Project IRI.
+        project: Id,
+        /// Requirement title.
+        title: String,
+        /// Optional description.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        /// Requirement kind.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<String>,
+    },
+    /// Lists requirements.
+    ListRequirements {
+        /// Project IRI.
+        project: Id,
+    },
+    /// Adds a work package, task, or milestone.
+    AddWork {
+        /// Project IRI.
+        project: Id,
+        /// Optional parent work item.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<Id>,
+        /// Work kind.
+        kind: WorkKind,
+        /// Title.
+        title: String,
+        /// Optional description.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+        /// Optional assignee.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        assignee: Option<String>,
+        /// Optional due date.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        due: Option<chrono::DateTime<chrono::Utc>>,
+    },
+    /// Lists work items.
+    ListWork {
+        /// Project IRI.
+        project: Id,
+    },
+    /// Transitions a work item.
+    Transition {
+        /// Work item IRI.
+        work: Id,
+        /// Requested transition.
+        event: TaskEvent,
+    },
+    /// Assigns a work item.
+    Assign {
+        /// Work item IRI.
+        work: Id,
+        /// Assignee.
+        assignee: String,
+    },
+    /// Adds a deliverable.
+    AddDeliverable {
+        /// Project IRI.
+        project: Id,
+        /// Title.
+        title: String,
+        /// Deliverable kinds.
+        #[serde(default)]
+        kinds: Vec<String>,
+        /// Target asset.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asset: Option<Id>,
+        /// Target release.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        release: Option<Id>,
+        /// Acceptance criteria.
+        #[serde(default)]
+        acceptance_criteria: Vec<String>,
+    },
+    /// Lists deliverables.
+    ListDeliverables {
+        /// Project IRI.
+        project: Id,
+    },
+    /// Links a deliverable to a published release.
+    LinkDeliverable {
+        /// Deliverable IRI.
+        deliverable: Id,
+        /// Release IRI or key.
+        release: String,
+    },
+    /// Accepts a deliverable against registry evidence.
+    Accept {
+        /// Deliverable IRI.
+        deliverable: Id,
+        /// Additional evidence label or IRI.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        evidence: Option<String>,
+        /// Additional acceptance criterion satisfied by the caller.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        criterion: Option<String>,
+    },
+    /// Records a project snapshot.
+    Snapshot {
+        /// Project IRI.
+        project: Id,
+    },
+    /// Returns a project overview.
+    Overview {
+        /// Project IRI.
+        project: Id,
+    },
+    /// Returns a due-date timeline.
+    Timeline {
+        /// Project IRI.
+        project: Id,
+    },
+    /// Returns work dependency edges.
+    Dependencies {
+        /// Project IRI.
+        project: Id,
     },
 }
 
@@ -617,6 +962,10 @@ pub enum CommandResult {
     Job(JobStatus),
     /// One document extraction result.
     Document(ExtractionOutput),
+    /// A registry operation result.
+    Registry(RegistryResult),
+    /// A project operation result.
+    Project(ProjectResult),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -637,6 +986,8 @@ enum CommandResultRepr {
     Export { format: String, data: String },
     Job(JobStatus),
     Document(ExtractionOutput),
+    Registry(RegistryResult),
+    Project(ProjectResult),
 }
 
 impl From<CommandResult> for CommandResultRepr {
@@ -657,6 +1008,8 @@ impl From<CommandResult> for CommandResultRepr {
             CommandResult::Export { format, data } => Self::Export { format, data },
             CommandResult::Job(value) => Self::Job(value),
             CommandResult::Document(value) => Self::Document(value),
+            CommandResult::Registry(value) => Self::Registry(value),
+            CommandResult::Project(value) => Self::Project(value),
         }
     }
 }
@@ -679,6 +1032,8 @@ impl From<CommandResultRepr> for CommandResult {
             CommandResultRepr::Export { format, data } => Self::Export { format, data },
             CommandResultRepr::Job(value) => Self::Job(value),
             CommandResultRepr::Document(value) => Self::Document(value),
+            CommandResultRepr::Registry(value) => Self::Registry(value),
+            CommandResultRepr::Project(value) => Self::Project(value),
         }
     }
 }

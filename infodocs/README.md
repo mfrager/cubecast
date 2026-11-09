@@ -14,7 +14,7 @@ same application behavior is exposed through three interfaces:
 
 - an asynchronous HTTP API (`ontology-api`);
 - a remote administration CLI and interactive shell (`onto`);
-- a four-tool MCP server for LLM agents (`ontology-mcp`).
+- a six-tool MCP server for LLM agents (`ontology-mcp`).
 
 Oxigraph over RocksDB is the only storage engine. It is isolated behind the
 `RdfStore` trait and the `ontology-rdf` crate. `ontology-graph` optionally

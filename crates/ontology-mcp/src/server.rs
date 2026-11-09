@@ -12,9 +12,10 @@ use rmcp::{tool, tool_handler, tool_router, ErrorData, ServerHandler, ServiceExt
 use serde_json::{json, Value};
 
 use crate::dispatch::{
-    jobs_command, ontology_command, rdf_command, semantic_command, DispatchContext, Resolver,
+    jobs_command, ontology_command, project_command, rdf_command, registry_command,
+    semantic_command, DispatchContext, Resolver,
 };
-use crate::params::{JobsArgs, OntologyArgs, RdfArgs, SemanticArgs};
+use crate::params::{JobsArgs, OntologyArgs, ProjectArgs, RdfArgs, RegistryArgs, SemanticArgs};
 use crate::policy::Policy;
 
 /// MCP server exposing the engine through `rdf`, `ontology`, `semantic`, and
@@ -135,6 +136,70 @@ impl McpServer {
         Ok(self
             .invoke(
                 "semantic",
+                action.as_str(),
+                args.args.target.as_deref(),
+                args.args.confirm,
+                args.args.dry_run,
+                command,
+            )
+            .await)
+    }
+
+    /// Semantic registry: catalogs, assets, ingestion, releases, and reports.
+    #[tool(
+        name = "registry",
+        description = "Manage the semantic registry. Actions: catalog, asset, ingest, \
+                       candidate, analyze, validate, publish, release, terms, imports, \
+                       diff, reports, profile. Use operation=... for sub-operations.",
+        annotations(
+            title = "Semantic registry",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = true
+        )
+    )]
+    async fn registry(
+        &self,
+        Parameters(args): Parameters<RegistryArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let action = args.action;
+        let command = registry_command(action, &args.args, &self.context());
+        Ok(self
+            .invoke(
+                "registry",
+                action.as_str(),
+                args.args.target.as_deref(),
+                args.args.confirm,
+                args.args.dry_run,
+                command,
+            )
+            .await)
+    }
+
+    /// Project management and deliverable acceptance.
+    #[tool(
+        name = "project",
+        description = "Manage projects and semantic deliverables. Actions: project, goal, \
+                       requirement, work, assign, transition, deliverable, accept, snapshot, \
+                       overview, timeline. Use operation=... for sub-operations.",
+        annotations(
+            title = "Project management",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn project(
+        &self,
+        Parameters(args): Parameters<ProjectArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let action = args.action;
+        let command = project_command(action, &args.args, &self.context());
+        Ok(self
+            .invoke(
+                "project",
                 action.as_str(),
                 args.args.target.as_deref(),
                 args.args.confirm,
@@ -327,6 +392,9 @@ fn error_kind(error: &Error) -> &'static str {
         Error::GraphPartial { .. } => "graph_partial",
         Error::Extraction { .. } => "extraction",
         Error::Python { .. } => "python",
+        Error::Registry { .. } => "registry",
+        Error::Project { .. } => "project",
+        Error::Limit { .. } => "limit",
     }
 }
 
